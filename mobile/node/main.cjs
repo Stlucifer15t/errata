@@ -11,16 +11,29 @@
  */
 // Requiring `bridge` first is what marks the runtime as ready on the Capacitor side.
 const { app, channel } = require('bridge')
-const { installPolyfills, buildServerEnv, serverUrl, waitForHealth, DEFAULT_PORT } = require('./boot.cjs')
+const {
+  installPolyfills,
+  installRegExpFallback,
+  buildServerEnv,
+  serverUrl,
+  waitForHealth,
+  DEFAULT_PORT,
+} = require('./boot.cjs')
 
 installPolyfills()
 
 const env = buildServerEnv(app.datadir(), DEFAULT_PORT)
 Object.assign(process.env, env)
 
+console.info(
+  `[android] node ${process.version}, icu ${process.versions.icu ?? 'none'}, intl ${typeof Intl}, ` +
+    `regexp-fallback ${globalThis.RegExp.__errataFallback ? 'on' : 'off'}, data ${env.DATA_DIR}`,
+)
+
 let state = { status: 'starting' }
 
 function announce() {
+  console.info(`[android] status -> ${state.status}${state.url ? ` ${state.url}` : ''}`)
   channel.post('errata:status', state)
 }
 
@@ -55,3 +68,6 @@ async function boot() {
 }
 
 void boot()
+
+// Re-exported for the unlikely case a plugin wants to reuse the shim.
+module.exports = { installRegExpFallback }

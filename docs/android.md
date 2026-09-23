@@ -22,8 +22,8 @@ Launch sequence:
 1. Capacitor shows `mobile/www/index.html` (parchment "Opening the library…").
 2. The Node.js plugin (`@capawesome/capacitor-nodejs`, Node 18.20.4) starts
    `nodejs/main.cjs` from the same web directory.
-3. `main.cjs` sets `DATA_DIR` to the app's private files directory, polyfills the two
-   globals Node 18 lacks, imports `server/index.mjs`, and polls `/api/health`.
+3. `main.cjs` sets `DATA_DIR` to the app's private files directory, installs the polyfills
+   Node 18 lacks, imports `server/index.mjs`, and polls `/api/health`.
 4. When healthy it posts `errata:status { status: 'ready', url }` over the plugin bridge
    and the loader does `location.replace('http://127.0.0.1:7739/')`.
 
@@ -93,6 +93,14 @@ stories from within Errata.
   relaunch.
 - **Size.** libnode is roughly 30 MB per ABI. The APK includes armeabi-v7a, arm64-v8a
   and x86_64; use an App Bundle for the Play Store so devices get one.
+- **No ICU in the runtime.** Node.js for Mobile Apps ships without Intl and without
+  Unicode property escapes in regexes. `boot.cjs` wraps `RegExp` so patterns built with
+  `\p{...}` (the OpenAPI plugin does this at import time) degrade to "any non-ASCII"
+  instead of crashing. `Intl` is simply undefined; server code must not rely on it.
+- **Patched plugin.** `patches/@capawesome%2Fcapacitor-nodejs@0.1.1.patch` makes the
+  plugin's started/ready flags static. Without it, Android recreating the activity
+  (Back at the root, then relaunch) starts libnode a second time in the same process
+  and the app crashes. Bun applies the patch on install; keep it until upstream fixes it.
 - **Background.** Android may pause the runtime when the app is backgrounded. The
   entry releases the pause lock immediately; in-flight generations resume with the app.
 
@@ -102,8 +110,10 @@ stories from within Errata.
   `http://127.0.0.1`. Check `android/app/src/main/res/xml/network_security_config.xml`
   is referenced from the manifest and permits cleartext for `127.0.0.1`.
 - *"Errata could not start" with a module error.* Usually a Node 18 gap. Reproduce on a
-  desktop with `npx -p node@18.20.4 node -r ./mobile/node/boot.cjs .output/server/index.mjs`
-  and extend `installPolyfills`.
+  desktop with real Node 18: write a preload that requires `mobile/node/boot.cjs`, calls
+  `installPolyfills()` and applies `buildServerEnv(tmpDir)` to `process.env`, then run
+  `npx -p node@18.20.4 node -r ./preload.cjs .output/server/index.mjs`. Extend
+  `installPolyfills` for whatever fails.
 - *Gradle: `LIBNODE_DIR must be defined` or CMake missing.* Install NDK + CMake through
   SDK Manager and sync again.
 - *Old assets after a rebuild.* `scripts/build-android.mjs` wipes `mobile/www` each run,

@@ -1,0 +1,19 @@
+diff --git a/android/src/main/java/io/capawesome/capacitorjs/plugins/nodejs/Nodejs.java b/android/src/main/java/io/capawesome/capacitorjs/plugins/nodejs/Nodejs.java
+index 9e2c69a2d9200450751366f8c699cda36f57298f..415750c917b4cb5bd6a7c93d498fccfbe2aa77e6 100644
+--- a/android/src/main/java/io/capawesome/capacitorjs/plugins/nodejs/Nodejs.java
++++ b/android/src/main/java/io/capawesome/capacitorjs/plugins/nodejs/Nodejs.java
+@@ -53,9 +53,12 @@ public class Nodejs {
+     @NonNull
+     private final NodejsPlugin plugin;
+ 
+-    private volatile boolean ready = false;
++    // Process-wide, not per instance: Capacitor creates a new plugin (and a new Nodejs)
++    // whenever the activity is recreated, but libnode can only be started once per
++    // process. A second start() would trap inside node::InitializeOncePerProcess.
++    private static volatile boolean ready = false;
+ 
+-    private volatile boolean started = false;
++    private static volatile boolean started = false;
+ 
+     public Nodejs(@NonNull NodejsPlugin plugin, @NonNull Context context, @NonNull NodejsConfig config) {
+         this.config = config;

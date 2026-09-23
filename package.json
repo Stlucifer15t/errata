@@ -99,5 +99,8 @@
     "typescript": "^5.7.2",
     "vite": "^7.1.7",
     "vitest": "^3.0.5"
+  },
+  "patchedDependencies": {
+    "@capawesome/capacitor-nodejs@0.1.1": "patches/@capawesome%2Fcapacitor-nodejs@0.1.1.patch"
   }
 }

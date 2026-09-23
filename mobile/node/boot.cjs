@@ -3,8 +3,9 @@
  * Pure helpers for booting the Errata server inside the embedded Node.js runtime on
  * Android. Kept free of the `bridge` module so they can be unit-tested on a desktop.
  *
- * The runtime is Node.js for Mobile Apps (18.x), so a couple of newer globals the
- * Nitro/Elysia bundle relies on are polyfilled here before the bundle is imported.
+ * The runtime is Node.js for Mobile Apps (18.x, built without full ICU), so a few
+ * things the Nitro/Elysia bundle relies on are polyfilled here before the bundle is
+ * imported.
  */
 const http = require('node:http')
 const { webcrypto } = require('node:crypto')
@@ -30,7 +31,78 @@ function installPolyfills(target = globalThis) {
   if (typeof target.crypto === 'undefined') {
     target.crypto = webcrypto
   }
+  installRegExpFallback(target)
   return target
+}
+
+/**
+ * Rewrite Unicode property escapes (`\p{Emoji}`, `\P{Letter}`) into plain ranges.
+ * Inside a character class the replacement is a bare range; outside it is wrapped
+ * in its own class. Escaped characters are skipped so `\\p` stays literal.
+ */
+function stripPropertyEscapes(source) {
+  let out = ''
+  let inClass = false
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i]
+    if (ch === '\\') {
+      const next = source[i + 1]
+      if ((next === 'p' || next === 'P') && source[i + 2] === '{') {
+        const close = source.indexOf('}', i + 3)
+        if (close !== -1) {
+          const negated = next === 'P'
+          const range = negated ? '\\x00-\\x7F' : '\\u0080-\\u{10FFFF}'
+          out += inClass ? range : `[${range}]`
+          i = close
+          continue
+        }
+      }
+      out += ch + (next ?? '')
+      i++
+      continue
+    }
+    if (ch === '[' && !inClass) inClass = true
+    else if (ch === ']' && inClass) inClass = false
+    out += ch
+  }
+  return out
+}
+
+/**
+ * V8 without ICU rejects `\p{...}` with "Invalid property name". Several server
+ * dependencies build such patterns with `new RegExp(...)` at import time (the
+ * OpenAPI plugin's emoji format, for one), which would take the whole bundle down.
+ * When the runtime lacks support, wrap the constructor so those patterns degrade to
+ * "any non-ASCII" instead of throwing. Returns true when the fallback was installed.
+ */
+function installRegExpFallback(target = globalThis) {
+  const Native = target.RegExp
+  if (typeof Native !== 'function') return false
+  try {
+    new Native('\\p{L}', 'u')
+    return false
+  } catch {
+    // fall through: property escapes unsupported
+  }
+  if (Native.__errataFallback) return false
+
+  const Patched = function RegExp(pattern, flags) {
+    try {
+      return new Native(pattern, flags)
+    } catch (error) {
+      const source = pattern instanceof Native ? pattern.source : pattern
+      if (error instanceof SyntaxError && typeof source === 'string' && /\\[pP]\{/.test(source)) {
+        const resolvedFlags = flags ?? (pattern instanceof Native ? pattern.flags : undefined)
+        return new Native(stripPropertyEscapes(source), resolvedFlags)
+      }
+      throw error
+    }
+  }
+  Patched.prototype = Native.prototype
+  Object.setPrototypeOf(Patched, Native)
+  Object.defineProperty(Patched, '__errataFallback', { value: true })
+  target.RegExp = Patched
+  return true
 }
 
 /**
@@ -87,4 +159,13 @@ function waitForHealth({ port = DEFAULT_PORT, host = LOOPBACK, timeoutMs = 60_00
   })
 }
 
-module.exports = { DEFAULT_PORT, LOOPBACK, installPolyfills, buildServerEnv, serverUrl, waitForHealth }
+module.exports = {
+  DEFAULT_PORT,
+  LOOPBACK,
+  installPolyfills,
+  installRegExpFallback,
+  stripPropertyEscapes,
+  buildServerEnv,
+  serverUrl,
+  waitForHealth,
+}

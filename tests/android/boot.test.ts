@@ -8,6 +8,8 @@ const require = createRequire(import.meta.url)
 interface BootModule {
   DEFAULT_PORT: number
   installPolyfills: (target?: object) => object
+  installRegExpFallback: (target?: object) => boolean
+  stripPropertyEscapes: (source: string) => string
   buildServerEnv: (dataRoot: string, port?: number) => Record<string, string>
   serverUrl: (port?: number) => string
   waitForHealth: (opts?: { port?: number; host?: string; timeoutMs?: number; intervalMs?: number }) => Promise<void>
@@ -15,11 +17,26 @@ interface BootModule {
 
 const boot = require('../../mobile/node/boot.cjs') as BootModule
 
+/**
+ * Mimics V8 built without ICU (Node.js for Mobile Apps): any pattern using a
+ * Unicode property escape is rejected at construction time.
+ */
+function makeNoIcuRegExp(): RegExpConstructor {
+  const Native = RegExp
+  const NoIcu = function (this: unknown, pattern: string | RegExp, flags?: string) {
+    const source = pattern instanceof Native ? pattern.source : String(pattern)
+    if (/\\[pP]\{/.test(source)) throw new SyntaxError(`Invalid regular expression: /${source}/: Invalid property name`)
+    return new Native(pattern, flags)
+  } as unknown as RegExpConstructor
+  NoIcu.prototype = Native.prototype
+  return NoIcu
+}
+
 describe('android boot helpers', () => {
   describe('installPolyfills', () => {
     it('adds Promise.withResolvers and a global crypto when missing', async () => {
       class FakePromise<T> extends Promise<T> {}
-      const target: Record<string, unknown> = { Promise: FakePromise }
+      const target: Record<string, unknown> = { Promise: FakePromise, RegExp }
       boot.installPolyfills(target)
 
       const withResolvers = (
@@ -39,10 +56,58 @@ describe('android boot helpers', () => {
     it('leaves existing implementations alone', () => {
       const existing = { withResolvers: () => 'mine' }
       const cryptoSentinel = { randomUUID: () => 'x' }
-      const target = { Promise: existing, crypto: cryptoSentinel }
+      const target = { Promise: existing, crypto: cryptoSentinel, RegExp }
       boot.installPolyfills(target)
       expect(target.Promise.withResolvers()).toBe('mine')
       expect(target.crypto).toBe(cryptoSentinel)
+      expect(target.RegExp).toBe(RegExp)
+    })
+  })
+
+  describe('stripPropertyEscapes', () => {
+    it('wraps escapes outside a class and inlines them inside one', () => {
+      expect(boot.stripPropertyEscapes('^\\p{Emoji}+$')).toBe('^[\\u0080-\\u{10FFFF}]+$')
+      expect(boot.stripPropertyEscapes('[\\p{L}_-]')).toBe('[\\u0080-\\u{10FFFF}_-]')
+      expect(boot.stripPropertyEscapes('\\P{ASCII}')).toBe('[\\x00-\\x7F]')
+    })
+
+    it('leaves escaped backslashes and other escapes untouched', () => {
+      expect(boot.stripPropertyEscapes('\\\\p{not}')).toBe('\\\\p{not}')
+      expect(boot.stripPropertyEscapes('\\d+\\s*\\[x\\]')).toBe('\\d+\\s*\\[x\\]')
+    })
+  })
+
+  describe('installRegExpFallback', () => {
+    it('is a no-op on a runtime with ICU', () => {
+      const target = { RegExp }
+      expect(boot.installRegExpFallback(target)).toBe(false)
+      expect(target.RegExp).toBe(RegExp)
+    })
+
+    it('rescues property-escape patterns on a runtime without ICU', () => {
+      const target = { RegExp: makeNoIcuRegExp() }
+      expect(boot.installRegExpFallback(target)).toBe(true)
+
+      const emoji = new target.RegExp('^(?:\\p{Emoji}\\uFE0F?)+$', 'u')
+      expect(emoji.test('🙂')).toBe(true)
+      expect(emoji.test('abc')).toBe(false)
+      expect(emoji).toBeInstanceOf(RegExp)
+
+      const word = new target.RegExp('[\\p{Alphabetic}\\p{Number}_]', 'u')
+      expect(word.test('_')).toBe(true)
+      expect(word.test('é')).toBe(true)
+
+      // Ordinary patterns and ordinary errors pass straight through.
+      expect(new target.RegExp('^a+$').test('aaa')).toBe(true)
+      expect(() => new target.RegExp('(')).toThrow(SyntaxError)
+    })
+
+    it('does not double-wrap when installed twice', () => {
+      const target = { RegExp: makeNoIcuRegExp() }
+      boot.installRegExpFallback(target)
+      const once = target.RegExp
+      expect(boot.installRegExpFallback(target)).toBe(false)
+      expect(target.RegExp).toBe(once)
     })
   })
 
