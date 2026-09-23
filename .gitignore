@@ -25,3 +25,6 @@ junit.xml
 dist-electron
 release
 build/icon.png
+
+# Android shell: generated web dir (assembled by scripts/build-android.mjs)
+mobile/www/

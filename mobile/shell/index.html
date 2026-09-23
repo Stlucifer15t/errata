@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Errata</title>
+  <style>
+    :root {
+      --bg: oklch(0.95 0.02 75);
+      --ink: oklch(0.32 0.04 55);
+      --muted: oklch(0.55 0.05 60);
+      --accent: oklch(0.485 0.105 55);
+      --rule: oklch(0.85 0.03 70);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: oklch(0.22 0.02 55);
+        --ink: oklch(0.9 0.02 75);
+        --muted: oklch(0.65 0.04 65);
+        --accent: oklch(0.765 0.105 65);
+        --rule: oklch(0.32 0.03 55);
+      }
+    }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Instrument Serif", "Newsreader", Georgia, "Times New Roman", serif;
+      display: grid;
+      place-items: center;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      -webkit-text-size-adjust: 100%;
+    }
+    main { text-align: center; max-width: 28rem; padding: 0 2rem; }
+    .mark {
+      color: var(--accent);
+      font-size: 2.25rem;
+      line-height: 1;
+      display: inline-block;
+      animation: breathe 3.2s ease-in-out infinite;
+    }
+    h1 {
+      font-weight: 400;
+      font-size: 2.5rem;
+      letter-spacing: 0.01em;
+      margin: 0.75rem 0 0.25rem;
+    }
+    p { margin: 0; }
+    .status {
+      font-style: italic;
+      font-size: 1.125rem;
+      color: var(--muted);
+      min-height: 1.6em;
+    }
+    .detail {
+      margin-top: 1.75rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--rule);
+      font-family: "Outfit", system-ui, sans-serif;
+      font-size: 0.8125rem;
+      line-height: 1.5;
+      color: var(--muted);
+      text-align: left;
+      white-space: pre-wrap;
+      word-break: break-word;
+      display: none;
+    }
+    .detail.visible { display: block; }
+    @keyframes breathe {
+      0%, 100% { opacity: 0.55; transform: rotate(0deg); }
+      50% { opacity: 1; transform: rotate(30deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .mark { animation: none; opacity: 0.85; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <span class="mark" aria-hidden="true">&#x273B;</span>
+    <h1>Errata</h1>
+    <p class="status" id="status" role="status">Opening the library&hellip;</p>
+    <p class="detail" id="detail"></p>
+  </main>
+  <script>
+    (function () {
+      var statusEl = document.getElementById('status')
+      var detailEl = document.getElementById('detail')
+      var handedOff = false
+
+      function setStatus(text) { statusEl.textContent = text }
+      function setDetail(text) {
+        detailEl.textContent = text || ''
+        detailEl.className = text ? 'detail visible' : 'detail'
+      }
+
+      var capacitor = window.Capacitor
+      var nodejs = capacitor && capacitor.Plugins && capacitor.Plugins.Nodejs
+      if (!nodejs) {
+        setStatus('This page only runs inside the Errata app.')
+        return
+      }
+
+      function handle(state) {
+        if (!state || handedOff) return
+        if (state.status === 'ready' && state.url) {
+          handedOff = true
+          setStatus('Ready.')
+          window.location.replace(state.url)
+        } else if (state.status === 'error') {
+          setStatus('Errata could not start.')
+          setDetail('Force-close the app and open it again. If it keeps happening, this is the error:\n\n' + (state.message || 'unknown error'))
+        } else {
+          setStatus('Opening the library…')
+        }
+      }
+
+      function askForStatus() {
+        nodejs.send({ eventName: 'errata:status', args: [] }).catch(function () {})
+      }
+
+      nodejs.addListener('message', function (event) {
+        if (event && event.eventName === 'errata:status') handle(event.args && event.args[0])
+      })
+      nodejs.addListener('ready', askForStatus)
+      nodejs.isReady().then(function (result) {
+        if (result && result.ready) askForStatus()
+      }).catch(function () {})
+
+      // A slow first launch is normal (the runtime unpacks itself). Say so rather than
+      // looking frozen.
+      setTimeout(function () {
+        if (!handedOff && !detailEl.classList.contains('visible')) {
+          setStatus('Still opening… the first launch takes a little longer.')
+        }
+      }, 20000)
+    })()
+  </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The WebView navigates from the Capacitor origin to the on-device Errata server at
+  http://127.0.0.1:7739. Cleartext is permitted for loopback only; every other host
+  keeps the platform default (HTTPS required).
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

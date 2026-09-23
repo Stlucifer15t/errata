@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Errata</string>
+    <string name="title_activity_main">Errata</string>
+    <string name="package_name">com.tealios.errata</string>
+    <string name="custom_url_scheme">com.tealios.errata</string>
+</resources>

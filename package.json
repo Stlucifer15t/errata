@@ -21,7 +21,10 @@
     "docs:sync": "bun scripts/sync-docs-from-commits.ts",
     "preview": "bun install --frozen-lockfile && vite preview",
     "test": "bun install --frozen-lockfile && vitest run --config vitest.config.ts",
-    "test:watch": "bun install --frozen-lockfile && vitest --config vitest.config.ts"
+    "test:watch": "bun install --frozen-lockfile && vitest --config vitest.config.ts",
+    "android:assemble": "bun scripts/build-android.mjs",
+    "android:open": "bun scripts/build-android.mjs && bunx cap open android",
+    "android:apk": "bun scripts/build-android.mjs --apk"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.94",
@@ -75,6 +78,10 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@capacitor/android": "8",
+    "@capacitor/cli": "8",
+    "@capacitor/core": "8",
+    "@capawesome/capacitor-nodejs": "^0.1.1",
     "@tanstack/devtools-vite": "^0.3.11",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.2.0",
