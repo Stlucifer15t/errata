@@ -11,7 +11,7 @@ import { ProseInlineEditor } from './ProseInlineEditor'
 import { anchorFromPoint, resolveCaretOffset } from '@/lib/prose-caret'
 import { type ThoughtStep } from './InlineGenerationInput'
 import { buildAnnotationHighlighter, formatDialogue, composeTextTransforms, stripEmphasisInDialogue, type Annotation } from '@/lib/character-mentions'
-import { RefreshCw, Undo2, PenLine, Bug, Trash2, GitBranch, MessageSquare, ChevronLeft, ChevronRight, Info, BookOpen, Volume2, Square } from 'lucide-react'
+import { RefreshCw, Undo2, PenLine, Bug, Trash2, GitBranch, MessageSquare, ChevronDown, ChevronLeft, ChevronRight, Info, BookOpen, Volume2, Square } from 'lucide-react'
 import { Caption } from '@/components/ui/prose-text'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useTtsSettings, useIsReadingFragment, playFragment, stopTts, resolveReadAloudText } from '@/lib/tts'
@@ -157,16 +157,40 @@ export const ProseBlock = memo(function ProseBlock({
   const [editingContent, setEditingContent] = useState(false)
   const [editCaret, setEditCaret] = useState(0)
   const [clickY, setClickY] = useState(0)
+  const [promptExpanded, setPromptExpanded] = useState(false)
+  const [promptOverflows, setPromptOverflows] = useState(false)
   const blockRef = useRef<HTMLDivElement>(null)
   const actionPanelRef = useRef<HTMLDivElement>(null)
   const actionInputRef = useRef<HTMLTextAreaElement>(null)
-  const promptInputRef = useRef<HTMLInputElement>(null)
+  const promptInputRef = useRef<HTMLTextAreaElement>(null)
+  const promptTextRef = useRef<HTMLSpanElement>(null)
 
   useEffect(() => {
     return () => {
       if (undoTimerRef.current) clearTimeout(undoTimerRef.current)
     }
   }, [])
+
+  // Auto-resize the inline prompt textarea (grow with content, then scroll)
+  useEffect(() => {
+    if (!editingPrompt) return
+    const el = promptInputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px'
+  }, [actionInput, editingPrompt])
+
+  // Detect whether the collapsed prompt line is clipped, to offer the expand toggle
+  useEffect(() => {
+    const el = promptTextRef.current
+    if (!el) return
+    const check = () => setPromptOverflows(el.scrollWidth > el.clientWidth + 1)
+    check()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [editingPrompt, promptExpanded, fragment.description, fragment.meta?.generatedFrom])
 
   // Dismiss action panel / prompt editor on outside click
   useEffect(() => {
@@ -490,20 +514,20 @@ export const ProseBlock = memo(function ProseBlock({
             <div className="flex items-start gap-2.5">
               <div className="w-0.5 self-stretch rounded-full bg-primary/50 shrink-0" />
               <div className="flex-1 min-w-0">
-                <input
+                <textarea
                   ref={promptInputRef}
-                  type="text"
                   value={actionInput}
                   onChange={(e) => setActionInput(e.target.value)}
-                  className="w-full bg-transparent font-display italic text-sm text-foreground/80 placeholder:text-muted-foreground outline-none border-none p-0 caret-primary"
+                  className="w-full resize-none bg-transparent font-display italic text-sm text-foreground/80 placeholder:text-muted-foreground outline-none border-none p-0 caret-primary"
                   placeholder="New direction..."
+                  rows={1}
                   autoFocus
                   onKeyDown={(e) => {
                     if (e.key === 'Escape') {
                       setEditingPrompt(false)
                       setActionInput('')
                     }
-                    if (e.key === 'Enter') {
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                       e.preventDefault()
                       handlePromptSubmit()
                     }
@@ -512,7 +536,7 @@ export const ProseBlock = memo(function ProseBlock({
                 <div className="flex items-center gap-2 mt-1.5">
                   <ProviderQuickSwitch storyId={storyId} isStreamingAction={isStreamingAction} />
                   <span className="text-[0.625rem] text-muted-foreground">
-                    Enter &middot; Esc
+                    Ctrl+Enter &middot; Esc
                   </span>
                   <button
                     className="ml-auto text-[0.625rem] px-1.5 py-0.5 rounded text-primary/70 hover:text-primary hover:bg-primary/10 transition-colors font-medium disabled:opacity-30"
@@ -525,34 +549,60 @@ export const ProseBlock = memo(function ProseBlock({
               </div>
             </div>
           ) : canQuickRegenerate ? (
-            <button
-              className="group/prompt flex min-h-6 items-start gap-2.5 w-full text-left transition-all"
-              onClick={(e) => {
-                e.stopPropagation()
-                setActionInput(generatedFrom || fragment.description || '')
-                setEditingPrompt(true)
-                requestAnimationFrame(() => {
-                  promptInputRef.current?.focus()
-                  promptInputRef.current?.select()
-                })
-              }}
-              title="Click to edit prompt and regenerate"
-            >
-              <div className="w-0.5 min-h-[1.25rem] rounded-full bg-primary/20 group-hover/prompt:bg-primary/45 transition-colors shrink-0 mt-0.5" />
-              <Caption asChild size="sm" className="font-display italic group-hover/prompt:text-muted-foreground truncate transition-colors">
-                <span>{generatedFrom || fragment.description}</span>
-              </Caption>
-              <RefreshCw className="size-3 shrink-0 mt-1 opacity-0 group-hover/prompt:opacity-40 transition-opacity" />
-              {hasMultiple && (
-                <span className="text-[0.625rem] font-mono text-muted-foreground shrink-0 ml-auto mt-0.5">{variationIndex + 1}/{variationCount}</span>
+            <div className="flex min-h-6 items-start gap-2.5">
+              <button
+                className="group/prompt flex min-w-0 flex-1 items-start gap-2.5 text-left transition-all"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setActionInput(generatedFrom || fragment.description || '')
+                  setEditingPrompt(true)
+                  requestAnimationFrame(() => {
+                    promptInputRef.current?.focus()
+                    promptInputRef.current?.select()
+                  })
+                }}
+                title="Click to edit prompt and regenerate"
+              >
+                <div className={`w-0.5 rounded-full bg-primary/20 group-hover/prompt:bg-primary/45 transition-colors shrink-0 ${promptExpanded ? 'self-stretch' : 'min-h-[1.25rem] mt-0.5'}`} />
+                <Caption asChild size="sm" className={`min-w-0 flex-1 font-display italic group-hover/prompt:text-muted-foreground transition-colors ${promptExpanded ? 'whitespace-pre-wrap break-words' : 'truncate'}`}>
+                  <span ref={promptTextRef}>{generatedFrom || fragment.description}</span>
+                </Caption>
+                <RefreshCw className="size-3 shrink-0 mt-1 opacity-0 group-hover/prompt:opacity-40 transition-opacity" />
+              </button>
+              {(promptOverflows || promptExpanded) && (
+                <button
+                  className="shrink-0 mt-0.5 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                  onClick={(e) => { e.stopPropagation(); setPromptExpanded(v => !v) }}
+                  title={promptExpanded ? 'Collapse prompt' : 'Show full prompt'}
+                  aria-label={promptExpanded ? 'Collapse prompt' : 'Show full prompt'}
+                  aria-expanded={promptExpanded}
+                >
+                  <ChevronDown className={`size-3 transition-transform duration-150 ${promptExpanded ? 'rotate-180' : ''}`} />
+                </button>
               )}
-            </button>
+              {hasMultiple && (
+                <span className="text-[0.625rem] font-mono text-muted-foreground shrink-0 mt-0.5">{variationIndex + 1}/{variationCount}</span>
+              )}
+            </div>
           ) : (
             <div className="flex items-start gap-2.5">
-              <div className="w-0.5 min-h-[1.25rem] rounded-full bg-border/30 shrink-0 mt-0.5" />
-              <Caption asChild size="sm" className="font-display italic truncate"><span>{fragment.description}</span></Caption>
+              <div className={`w-0.5 rounded-full bg-border/30 shrink-0 ${promptExpanded ? 'self-stretch' : 'min-h-[1.25rem] mt-0.5'}`} />
+              <Caption asChild size="sm" className={`min-w-0 flex-1 font-display italic ${promptExpanded ? 'whitespace-pre-wrap break-words' : 'truncate'}`}>
+                <span ref={promptTextRef}>{fragment.description}</span>
+              </Caption>
+              {(promptOverflows || promptExpanded) && (
+                <button
+                  className="shrink-0 mt-0.5 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                  onClick={(e) => { e.stopPropagation(); setPromptExpanded(v => !v) }}
+                  title={promptExpanded ? 'Collapse prompt' : 'Show full prompt'}
+                  aria-label={promptExpanded ? 'Collapse prompt' : 'Show full prompt'}
+                  aria-expanded={promptExpanded}
+                >
+                  <ChevronDown className={`size-3 transition-transform duration-150 ${promptExpanded ? 'rotate-180' : ''}`} />
+                </button>
+              )}
               {hasMultiple && (
-                <span className="text-[0.625rem] font-mono text-muted-foreground shrink-0 ml-auto mt-0.5">{variationIndex + 1}/{variationCount}</span>
+                <span className="text-[0.625rem] font-mono text-muted-foreground shrink-0 mt-0.5">{variationIndex + 1}/{variationCount}</span>
               )}
             </div>
           )}
