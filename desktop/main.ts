@@ -3,11 +3,12 @@
  * pointed at it, and wires auto-updates. In development, set ERRATA_DEV_URL (e.g.
  * http://localhost:7739) to skip the sidecar and load a running `bun run dev` server.
  */
-import { app, BrowserWindow, dialog, shell } from 'electron'
+import { app, BrowserWindow, dialog, Menu, shell, type MenuItemConstructorOptions } from 'electron'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { startSidecar, type SidecarHandle } from './sidecar'
 import { setupUpdater } from './updater'
+import { buildContextMenuTemplate } from './context-menu'
 
 // Warm parchment so the first paint is not a white flash. Matches the bookish palette.
 const BACKGROUND_COLOR = '#efe7d6'
@@ -49,6 +50,14 @@ function createWindow(): BrowserWindow {
     if (/^https?:/.test(url)) shell.openExternal(url)
     return { action: 'deny' }
   })
+  // Native right-click menu — Electron shows none by default.
+  win.webContents.on('context-menu', (_event, params) => {
+    const template = buildContextMenuTemplate(params)
+    if (template.length) {
+      Menu.buildFromTemplate(template as MenuItemConstructorOptions[]).popup({ window: win })
+    }
+  })
+
   win.webContents.on('will-navigate', (event, url) => {
     const current = win.webContents.getURL()
     if (current && new URL(url).origin !== new URL(current).origin) {
