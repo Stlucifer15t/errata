@@ -40,6 +40,37 @@ import {
   updateAgentDisabledTools,
   AgentBlockConfigSchema,
 } from '../agents/agent-block-storage'
+import {
+  AgentConfigBundleSchema,
+  snapshotAgentConfig,
+  applyAgentConfigToStory,
+  bundleHasScripts,
+  type AgentConfigBundle,
+} from '../erratanet/agent-config-bundle'
+import { z } from 'zod/v4'
+
+/**
+ * Coerce an uploaded payload into an agent-config bundle. Accepts the canonical
+ * `agent-config-bundle` envelope (also what presets and hub packs carry) and the
+ * legacy bare `{ agentBlockConfigs }` shape from fragment-export ride-alongs.
+ */
+const LegacyConfigsSchema = z.object({
+  agentBlockConfigs: z.record(z.string(), AgentBlockConfigSchema),
+})
+
+function coerceBundle(input: unknown): AgentConfigBundle | null {
+  const canonical = AgentConfigBundleSchema.safeParse(input)
+  if (canonical.success) return canonical.data
+  const legacy = LegacyConfigsSchema.safeParse(input)
+  if (!legacy.success) return null
+  return {
+    _errata: 'agent-config-bundle',
+    version: 1,
+    source: 'import',
+    exportedAt: new Date().toISOString(),
+    agentBlockConfigs: legacy.data.agentBlockConfigs,
+  }
+}
 
 export function agentBlockRoutes(dataDir: string) {
   // Idempotent; run once so every handler sees a populated registry.
@@ -64,6 +95,38 @@ export function agentBlockRoutes(dataDir: string) {
         availableTools: def.availableTools ?? [],
       }))
     }, { detail: { summary: 'List all agent block definitions' } })
+
+    // Export EVERY configured agent's block config as one portable bundle —
+    // the file-based counterpart of ErrataNet presets, for moving a whole
+    // agent setup between stories (or installs) without the hub.
+    .get('/stories/:storyId/agent-config/export', withStory(dataDir, async (_story, { params }) => {
+      return snapshotAgentConfig(dataDir, params.storyId, ['agent-blocks'])
+    }), { detail: { summary: 'Export the whole agent configuration as a bundle' } })
+
+    // Import a whole agent-config bundle into this story. Script blocks are
+    // gated behind explicit consent, mirroring the preset/pack apply flow.
+    .post('/stories/:storyId/agent-config/import', withStory(dataDir, async (_story, { params, body, set }) => {
+      const { bundle: rawBundle, consentToScripts } = body as {
+        bundle?: unknown
+        consentToScripts?: boolean
+      }
+      const bundle = coerceBundle(rawBundle)
+      if (!bundle) {
+        set.status = 422
+        return { error: 'Not an agent configuration file.' }
+      }
+      if (bundleHasScripts(bundle) && !consentToScripts) {
+        set.status = 422
+        return {
+          error: 'This configuration runs code; consent is required to apply it.',
+          requiresConsent: true,
+        }
+      }
+      const applied = await applyAgentConfigToStory(dataDir, params.storyId, bundle, {
+        consentToScripts,
+      })
+      return { applied }
+    }), { detail: { summary: 'Import a whole agent configuration bundle' } })
 
     // Export a single agent's block config for sharing
     .get('/stories/:storyId/agent-blocks/:agentName/export-config', withStory(dataDir, async (_story, { params, set }) => {
