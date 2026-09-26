@@ -279,6 +279,16 @@ describe('Bundle export/import routes', () => {
     expect(data.agentBlockConfigs['generation.writer'].customBlocks[0].id).toBe('cb-exp001')
   })
 
+  it('GET /export-configs keeps a config whose only change is disableAutoAnalysis', async () => {
+    const storyId = await createStory()
+    await apiJson(`/stories/${storyId}/agent-blocks/librarian.analyze/config`, {
+      disableAutoAnalysis: true,
+    }, 'PATCH')
+    const res = await api(`/stories/${storyId}/export-configs`)
+    const data = await res.json()
+    expect(data.agentBlockConfigs?.['librarian.analyze']?.disableAutoAnalysis).toBe(true)
+  })
+
   it('POST /import-configs imports agentBlockConfigs', async () => {
     const storyId = await createStory()
     const payload = {

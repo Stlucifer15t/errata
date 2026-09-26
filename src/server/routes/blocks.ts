@@ -69,7 +69,8 @@ export function blockRoutes(dataDir: string) {
           cfg.customBlocks.length === 0 &&
           Object.keys(cfg.overrides).length === 0 &&
           cfg.blockOrder.length === 0 &&
-          cfg.disabledTools.length === 0
+          cfg.disabledTools.length === 0 &&
+          !cfg.disableAutoAnalysis
         if (!isEmpty) {
           agentBlockConfigs[def.agentName] = cfg
         }

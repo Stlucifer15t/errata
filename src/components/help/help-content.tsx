@@ -916,6 +916,13 @@ return rules.map(r => r.content).join('\\n')`}</div>
               per-section checkboxes let you choose which configs to apply. Imported configs replace
               existing ones for that section.
             </P>
+            <P>
+              To move an <strong className="text-foreground/75">entire agent setup</strong> between
+              stories on its own, use the export and import buttons at the top of the Agents panel&apos;s
+              Configure tab. One file carries every agent&apos;s blocks; single agents can still be
+              exported from inside each agent&apos;s editor. Imports that contain script blocks ask
+              for consent before applying.
+            </P>
             <Tip>
               Since fragment IDs may change on import, use tags in script blocks instead of hardcoded IDs.
               For example, tag a fragment "world-rules" and use <Mono>ctx.getFragmentByTag('world-rules')</Mono>{' '}
