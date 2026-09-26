@@ -170,6 +170,20 @@ export function toPlainText(md: string): string {
 }
 
 /**
+ * What a Read aloud action should speak: the user's selection when it has
+ * content, the whole fragment otherwise. Pure — callers decide whether the
+ * selection is relevant (e.g. inside the block being read) before passing it.
+ */
+export function resolveReadAloudText(
+  selectionText: string | null | undefined,
+  fragmentContent: string,
+): { text: string; isSelection: boolean } {
+  const sel = selectionText?.trim()
+  if (sel) return { text: sel, isSelection: true }
+  return { text: fragmentContent, isSelection: false }
+}
+
+/**
  * Split plain text into speakable chunks: greedily merge whole sentences up to
  * `max` chars so each chunk is a natural unit, hard-splitting any runaway
  * sentence on whitespace so a chunk never blocks the queue for too long.

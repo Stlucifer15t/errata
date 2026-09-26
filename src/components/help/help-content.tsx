@@ -1456,7 +1456,8 @@ return rules.map(r => r.content).join('\\n')`}</div>
               Turn on <strong className="text-foreground/75">Read aloud</strong> in Settings to add a
               Read aloud action to every passage and a slim player at the bottom of the screen. It is
               off by default. Passages are synthesized and played sentence by sentence, so audio
-              starts almost immediately instead of waiting for the whole passage.
+              starts almost immediately instead of waiting for the whole passage. Select text within
+              a passage first to have just the selection read instead of the whole thing.
             </P>
             <P>
               <strong className="text-foreground/75">Browser</strong> uses your system's built-in

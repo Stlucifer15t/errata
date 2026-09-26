@@ -14,7 +14,7 @@ import { buildAnnotationHighlighter, formatDialogue, composeTextTransforms, stri
 import { RefreshCw, Undo2, PenLine, Bug, Trash2, GitBranch, MessageSquare, ChevronLeft, ChevronRight, Info, BookOpen, Volume2, Square } from 'lucide-react'
 import { Caption } from '@/components/ui/prose-text'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { useTtsSettings, useIsReadingFragment, playFragment, stopTts } from '@/lib/tts'
+import { useTtsSettings, useIsReadingFragment, playFragment, stopTts, resolveReadAloudText } from '@/lib/tts'
 
 interface ProseBlockProps {
   storyId: string
@@ -839,7 +839,23 @@ export const ProseBlock = memo(function ProseBlock({
                   onClick={() => {
                     if (!ttsSettings.enabled) return
                     if (isReadingThis) stopTts()
-                    else playFragment(fragment.id, fragment.content, fragment.name, ttsSettings)
+                    else {
+                      // Read just the selection when one lies inside this block;
+                      // a stray selection elsewhere shouldn't hijack playback.
+                      const selection = window.getSelection()
+                      const inThisBlock = selection?.anchorNode != null
+                        && blockRef.current?.contains(selection.anchorNode) === true
+                      const { text, isSelection } = resolveReadAloudText(
+                        inThisBlock ? selection?.toString() : undefined,
+                        fragment.content,
+                      )
+                      playFragment(
+                        fragment.id,
+                        text,
+                        isSelection ? `${fragment.name} · selection` : fragment.name,
+                        ttsSettings,
+                      )
+                    }
                     setShowActions(false)
                   }}
                   data-component-id={`prose-${fragment.id}-read-aloud`}

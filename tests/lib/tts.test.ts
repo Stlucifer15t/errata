@@ -6,6 +6,7 @@ import {
   isBrowserTtsSupported,
   toPlainText,
   chunkText,
+  resolveReadAloudText,
 } from '@/lib/tts'
 
 describe('tts settings', () => {
@@ -69,6 +70,26 @@ describe('toPlainText', () => {
 
   it('drops emoji/symbols that have no spoken form', () => {
     expect(toPlainText('hi \u{1F600} there ✨')).toBe('hi there')
+  })
+})
+
+describe('resolveReadAloudText', () => {
+  it('reads the whole fragment when there is no selection', () => {
+    expect(resolveReadAloudText(undefined, 'Full passage.')).toEqual({ text: 'Full passage.', isSelection: false })
+    expect(resolveReadAloudText(null, 'Full passage.')).toEqual({ text: 'Full passage.', isSelection: false })
+    expect(resolveReadAloudText('', 'Full passage.')).toEqual({ text: 'Full passage.', isSelection: false })
+  })
+
+  it('treats a whitespace-only selection as no selection', () => {
+    expect(resolveReadAloudText('  \n\t ', 'Full passage.')).toEqual({ text: 'Full passage.', isSelection: false })
+  })
+
+  it('reads just the selection when one is present', () => {
+    expect(resolveReadAloudText('the good part', 'Full passage.')).toEqual({ text: 'the good part', isSelection: true })
+  })
+
+  it('preserves inner content of the selection, trimming only the edges', () => {
+    expect(resolveReadAloudText('  One. Two.  ', 'Full passage.')).toEqual({ text: 'One. Two.', isSelection: true })
   })
 })
 
