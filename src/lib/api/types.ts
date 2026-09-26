@@ -396,6 +396,24 @@ export interface ExportedAgentConfig {
   config: AgentBlockConfig
 }
 
+/** The portable whole-config bundle (same envelope as ErrataNet presets/packs). */
+export interface AgentConfigBundleFile {
+  _errata: 'agent-config-bundle'
+  version: 1
+  source: string
+  exportedAt: string
+  agentBlockConfigs?: Record<string, AgentBlockConfig>
+}
+
+export interface AgentConfigImportResult {
+  applied: {
+    agentsApplied: string[]
+    modelRolesApplied: string[]
+    modelRolesNeedingProvider: string[]
+    suggestedProviders: unknown[]
+  }
+}
+
 // Config export/import types
 export interface ExportedConfigs {
   blockConfig?: BlockConfig

@@ -154,8 +154,29 @@ function groupAgents(agents: AgentBlockInfo[]): { label: string; agents: AgentBl
   return groups
 }
 
+/** What an imported whole-config file contains, scanned client-side for the confirm dialog. */
+function scanImportedBundle(parsed: unknown): { agentNames: string[]; blockCount: number; hasScripts: boolean } | null {
+  if (typeof parsed !== 'object' || parsed === null) return null
+  const configs = (parsed as { agentBlockConfigs?: unknown }).agentBlockConfigs
+  if (typeof configs !== 'object' || configs === null) return null
+  const agentNames = Object.keys(configs)
+  let blockCount = 0
+  let hasScripts = false
+  for (const cfg of Object.values(configs as Record<string, { customBlocks?: { type?: string }[] }>)) {
+    const blocks = Array.isArray(cfg?.customBlocks) ? cfg.customBlocks : []
+    blockCount += blocks.length
+    if (blocks.some((b) => b?.type === 'script')) hasScripts = true
+  }
+  return { agentNames, blockCount, hasScripts }
+}
+
 export function AgentConfigurePanel({ storyId }: AgentConfigurePanelProps) {
+  const queryClient = useQueryClient()
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
+  const [pendingImport, setPendingImport] = useState<unknown>(null)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: agents, isLoading } = useQuery({
     queryKey: ['agent-blocks'],
@@ -166,6 +187,58 @@ export function AgentConfigurePanel({ storyId }: AgentConfigurePanelProps) {
     queryKey: ['story', storyId],
     queryFn: () => api.stories.get(storyId),
   })
+
+  const handleExportAll = useCallback(async () => {
+    try {
+      const bundle = await api.agentBlocks.exportAll(storyId)
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const safeName = (story?.name ?? 'story').replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 40)
+      a.download = `errata-${safeName}-agent-config.json`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      // silently fail, matching the per-agent export
+    }
+  }, [storyId, story?.name])
+
+  const handleImportFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    try {
+      const parsed = JSON.parse(await file.text())
+      setImportError(null)
+      setPendingImport(parsed)
+    } catch {
+      setImportError('Could not read that file as JSON.')
+      setPendingImport({})
+    }
+  }, [])
+
+  const importSummary = useMemo(
+    () => (pendingImport !== null ? scanImportedBundle(pendingImport) : null),
+    [pendingImport],
+  )
+
+  const confirmImportAll = useCallback(async () => {
+    if (!pendingImport || !importSummary) return
+    setImporting(true)
+    try {
+      await api.agentBlocks.importAll(storyId, pendingImport, importSummary.hasScripts)
+      queryClient.invalidateQueries({ queryKey: ['agent-blocks'] })
+      queryClient.invalidateQueries({ queryKey: ['agent-block-preview'] })
+      queryClient.invalidateQueries({ queryKey: ['story', storyId] })
+      setPendingImport(null)
+      setImportError(null)
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Import failed.')
+    } finally {
+      setImporting(false)
+    }
+  }, [pendingImport, importSummary, storyId, queryClient])
 
   if (isLoading) {
     return (
@@ -202,10 +275,37 @@ export function AgentConfigurePanel({ storyId }: AgentConfigurePanelProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="px-4 py-3 border-b border-border/30">
-        <p className="text-[0.6875rem] text-muted-foreground leading-snug">
+      <div className="px-4 py-3 border-b border-border/30 flex items-center gap-2">
+        <p className="flex-1 min-w-0 text-[0.6875rem] text-muted-foreground leading-snug">
           Customize the context blocks, tools, and model for each agent.
         </p>
+        <div className="flex items-center shrink-0">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="size-7 p-0"
+            onClick={handleExportAll}
+            title="Export all agent configs"
+          >
+            <Upload className="size-3.5" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="size-7 p-0"
+            onClick={() => fileInputRef.current?.click()}
+            title="Import agent configs"
+          >
+            <Download className="size-3.5" />
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={handleImportFile}
+          />
+        </div>
       </div>
 
       <ScrollArea className="flex-1 min-h-0">
@@ -243,6 +343,52 @@ export function AgentConfigurePanel({ storyId }: AgentConfigurePanelProps) {
           ))}
         </div>
       </ScrollArea>
+
+      <Dialog open={pendingImport !== null} onOpenChange={(open) => { if (!open) { setPendingImport(null); setImportError(null) } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Import Agent Configuration</DialogTitle>
+            <DialogDescription>
+              {importSummary
+                ? 'Replaces this story’s block setup for the agents below.'
+                : 'This file doesn’t look like an agent configuration export.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {importSummary && (
+            <div className="space-y-2">
+              <div className="rounded-lg border border-border/40 bg-card/40 px-3 py-2.5 space-y-1">
+                {importSummary.agentNames.map((name) => (
+                  <p key={name} className="text-[0.75rem] leading-snug">
+                    {agents.find((a) => a.agentName === name)?.displayName ?? name}
+                  </p>
+                ))}
+                <p className="pt-0.5 text-[0.625rem] text-muted-foreground tabular-nums">
+                  {importSummary.agentNames.length} {importSummary.agentNames.length === 1 ? 'agent' : 'agents'} · {importSummary.blockCount} custom {importSummary.blockCount === 1 ? 'block' : 'blocks'}
+                </p>
+              </div>
+              {importSummary.hasScripts && (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-2.5 py-2">
+                  <p className="flex items-center gap-1.5 text-[0.6875rem] leading-snug text-muted-foreground">
+                    <Code2 className="size-3 shrink-0 text-amber-600 dark:text-amber-400" />
+                    This configuration contains script blocks that run code when building context.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+          {importError && (
+            <p className="text-[0.6875rem] text-destructive">{importError}</p>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setPendingImport(null); setImportError(null) }}>Cancel</Button>
+            <Button onClick={confirmImportAll} disabled={!importSummary || importing}>
+              {importSummary?.hasScripts ? 'Import anyway' : 'Import'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

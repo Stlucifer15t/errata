@@ -4,6 +4,8 @@ import type {
   AgentBlocksResponse,
   AgentBlockConfig,
   ExportedAgentConfig,
+  AgentConfigBundleFile,
+  AgentConfigImportResult,
   BlockPreviewResponse,
   CustomBlockDefinition,
   BlockOverride,
@@ -30,6 +32,15 @@ export const agentBlocks = {
     apiFetch<{ ok: boolean }>(`/stories/${storyId}/agent-blocks/${agentName}/import-config`, {
       method: 'POST',
       body: JSON.stringify({ config }),
+    }),
+
+  exportAll: (storyId: string) =>
+    apiFetch<AgentConfigBundleFile>(`/stories/${storyId}/agent-config/export`),
+
+  importAll: (storyId: string, bundle: unknown, consentToScripts?: boolean) =>
+    apiFetch<AgentConfigImportResult>(`/stories/${storyId}/agent-config/import`, {
+      method: 'POST',
+      body: JSON.stringify({ bundle, ...(consentToScripts ? { consentToScripts: true } : {}) }),
     }),
 
   createCustom: (storyId: string, agentName: string, data: CustomBlockDefinition) =>
