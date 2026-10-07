@@ -1,7 +1,9 @@
 import { Elysia, t } from 'elysia'
+import { hasChatMessageContent } from '@/lib/chat-message'
 import { createAgentInstance } from '../agents'
 import { getStory } from '../fragments/storage'
 import { encodeStream } from './encode-stream'
+import { chatMessageBodySchema } from './chat-schema'
 import { applyStorySetupPlan, generateStorySetupPlan } from '../story-setup/plan'
 import { createLogger } from '../logging'
 
@@ -34,10 +36,7 @@ export function storySetupRoutes(dataDir: string) {
       }
     }, {
       body: t.Object({
-        messages: t.Array(t.Object({
-          role: t.Union([t.Literal('user'), t.Literal('assistant')]),
-          content: t.String(),
-        })),
+        messages: t.Array(chatMessageBodySchema),
       }),
       detail: { summary: 'Continue the conversational story setup' },
     })
@@ -48,7 +47,7 @@ export function storySetupRoutes(dataDir: string) {
         return { error: 'Story not found' }
       }
 
-      if (!body.messages.some(message => message.role === 'user' && message.content.trim())) {
+      if (!body.messages.some(message => message.role === 'user' && hasChatMessageContent(message))) {
         set.status = 422
         return { error: 'Tell Errata something about the story first' }
       }
@@ -72,10 +71,7 @@ export function storySetupRoutes(dataDir: string) {
       }
     }, {
       body: t.Object({
-        messages: t.Array(t.Object({
-          role: t.Union([t.Literal('user'), t.Literal('assistant')]),
-          content: t.String(),
-        })),
+        messages: t.Array(chatMessageBodySchema),
         draftFragments: t.Optional(t.Array(t.Object({
           key: t.String({ minLength: 1, maxLength: 50, pattern: '^[a-z0-9][a-z0-9-]*$' }),
           type: t.Union([

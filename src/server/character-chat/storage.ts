@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { getContentRoot } from '../fragments/branches'
 import { writeJsonAtomic } from '../fs-utils'
+import type { ChatImageAttachment } from '@/lib/chat-image'
 
 // --- Types ---
 
@@ -15,6 +16,7 @@ export interface CharacterChatMessage {
   role: 'user' | 'assistant'
   content: string
   reasoning?: string
+  images?: ChatImageAttachment[]
   createdAt: string
 }
 

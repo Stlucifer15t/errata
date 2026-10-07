@@ -25,6 +25,7 @@ import {
 import { applyFragmentSuggestion } from '../librarian/suggestions'
 import { createLogger } from '../logging'
 import { encodeStream } from './encode-stream'
+import { chatMessageBodySchema } from './chat-schema'
 
 export function librarianRoutes(dataDir: string) {
   const logger = createLogger('api:librarian', { dataDir })
@@ -427,10 +428,7 @@ export function librarianRoutes(dataDir: string) {
       }
     }, {
       body: t.Object({
-        messages: t.Array(t.Object({
-          role: t.Union([t.Literal('user'), t.Literal('assistant')]),
-          content: t.String(),
-        })),
+        messages: t.Array(chatMessageBodySchema),
       }),
       detail: { summary: 'Chat with the librarian (streaming NDJSON)' },
     })
@@ -503,10 +501,7 @@ export function librarianRoutes(dataDir: string) {
       }
     }, {
       body: t.Object({
-        messages: t.Array(t.Object({
-          role: t.Union([t.Literal('user'), t.Literal('assistant')]),
-          content: t.String(),
-        })),
+        messages: t.Array(chatMessageBodySchema),
       }),
       detail: { summary: 'Chat in a conversation (streaming NDJSON)' },
     })

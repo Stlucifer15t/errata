@@ -7,11 +7,14 @@ import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Send, Loader2 } from 'lucide-react'
 import { Caption, EmptyHint } from '@/components/ui/prose-text'
+import { ChatImagePicker } from '@/components/chat/ChatImagePicker'
 import {
   AssistantMessageView,
+  UserMessageView,
   type AssistantMessage,
   type ChatMessage,
 } from '@/components/chat/ChatMessageParts'
+import type { ChatImageAttachment } from '@/lib/chat-image'
 import { CharacterAvatar } from '@/components/shared/CharacterAvatar'
 import { ChatConfig } from './ChatConfig'
 import { ConversationList } from './ConversationList'
@@ -34,6 +37,7 @@ export function CharacterChatView({ storyId, initialCharacterId, onClose }: Char
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
+  const [pendingImages, setPendingImages] = useState<ChatImageAttachment[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showConversations, setShowConversations] = useState(false)
@@ -110,6 +114,7 @@ export function CharacterChatView({ storyId, initialCharacterId, onClose }: Char
     setCharacterId(id)
     setConversationId(null)
     setMessages([])
+    setPendingImages([])
     setError(null)
   }, [])
 
@@ -117,6 +122,7 @@ export function CharacterChatView({ storyId, initialCharacterId, onClose }: Char
   const startNewConversation = useCallback(() => {
     setConversationId(null)
     setMessages([])
+    setPendingImages([])
     setError(null)
     setShowConversations(false)
     textareaRef.current?.focus()
@@ -138,8 +144,13 @@ export function CharacterChatView({ storyId, initialCharacterId, onClose }: Char
             ...(m.reasoning ? { reasoning: m.reasoning } : {}),
           }
         }
-        return { role: 'user' as const, content: m.content }
+        return {
+          role: 'user' as const,
+          content: m.content,
+          ...(m.images?.length ? { images: m.images } : {}),
+        }
       }))
+      setPendingImages([])
       setError(null)
       setShowConversations(false)
     } catch (err) {
@@ -150,12 +161,17 @@ export function CharacterChatView({ storyId, initialCharacterId, onClose }: Char
   // Send a message
   const handleSend = useCallback(async () => {
     const text = input.trim()
-    if (!text || isStreaming || !characterId) return
+    if ((!text && pendingImages.length === 0) || isStreaming || !characterId) return
 
     setInput('')
+    setPendingImages([])
     setError(null)
 
-    const userMessage: ChatMessage = { role: 'user', content: text }
+    const userMessage: ChatMessage = {
+      role: 'user',
+      content: text,
+      ...(pendingImages.length > 0 ? { images: pendingImages } : {}),
+    }
     const updatedMessages = [...messages, userMessage]
     setMessages(updatedMessages)
 
@@ -177,10 +193,11 @@ export function CharacterChatView({ storyId, initialCharacterId, onClose }: Char
         setConversationId(conv.id)
       }
 
-      // Build API messages (text only)
+      // Include image attachments with their original user turns.
       const apiMessages = updatedMessages.map((m) => ({
         role: m.role,
         content: m.content,
+        ...(m.role === 'user' && m.images?.length ? { images: m.images } : {}),
       }))
 
       const stream = await api.characterChat.chat(storyId, activeConvId, apiMessages)
@@ -243,7 +260,7 @@ export function CharacterChatView({ storyId, initialCharacterId, onClose }: Char
       setIsStreaming(false)
       textareaRef.current?.focus()
     }
-  }, [input, isStreaming, characterId, messages, conversationId, storyId, persona, storyPointId, queryClient])
+  }, [input, pendingImages, isStreaming, characterId, messages, conversationId, storyId, persona, storyPointId, queryClient])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -345,7 +362,7 @@ export function CharacterChatView({ storyId, initialCharacterId, onClose }: Char
                       </div>
                     </div>
                   ) : (
-                    <div className="break-words whitespace-pre-wrap">{msg.content}</div>
+                    <UserMessageView message={msg} />
                   )}
                 </div>
               </div>
@@ -364,7 +381,8 @@ export function CharacterChatView({ storyId, initialCharacterId, onClose }: Char
 
       {/* Input */}
       <div className="border-t border-border/20 bg-card/20">
-        <div className="max-w-2xl mx-auto px-4 py-3">
+        <div className="max-w-2xl mx-auto px-4 py-3 space-y-2">
+          <ChatImagePicker images={pendingImages} onChange={setPendingImages} disabled={isStreaming || !characterId} />
           <div className="flex gap-2 items-end">
             <Textarea
               ref={textareaRef}
@@ -386,7 +404,7 @@ export function CharacterChatView({ storyId, initialCharacterId, onClose }: Char
             <Button
               size="icon"
               className="size-9 shrink-0"
-              disabled={!input.trim() || isStreaming || !characterId}
+              disabled={(!input.trim() && pendingImages.length === 0) || isStreaming || !characterId}
               onClick={handleSend}
               data-component-id="character-chat-send"
             >

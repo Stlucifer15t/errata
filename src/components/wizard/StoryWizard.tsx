@@ -11,6 +11,9 @@ import {
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { StreamMarkdown } from '@/components/ui/stream-markdown'
+import { ChatImagePicker } from '@/components/chat/ChatImagePicker'
+import { ChatImagePreviews } from '@/components/chat/ChatMessageParts'
+import type { ChatImageAttachment } from '@/lib/chat-image'
 import { ErrataMark } from '@/components/ErrataLogo'
 import { readStorySetupSession, writeStorySetupSession } from './story-setup-session'
 
@@ -64,13 +67,16 @@ function AssistantTurn({ content, streaming = false }: { content: string; stream
   )
 }
 
-function WriterTurn({ content }: { content: string }) {
+function WriterTurn({ message }: { message: StorySetupMessage }) {
   return (
     <article className="ml-10 sm:ml-11" data-component-id="story-setup-writer-turn">
       <p className="mb-1.5 text-xs font-medium text-muted-foreground">You</p>
-      <p className="max-w-[68ch] whitespace-pre-wrap rounded-lg bg-muted/45 px-4 py-3 font-prose text-[0.95rem] leading-6 text-foreground sm:text-base">
-        {content}
-      </p>
+      {message.content && (
+        <p className="max-w-[68ch] whitespace-pre-wrap rounded-lg bg-muted/45 px-4 py-3 font-prose text-[0.95rem] leading-6 text-foreground sm:text-base">
+          {message.content}
+        </p>
+      )}
+      <ChatImagePreviews images={message.images} className="mt-2 max-w-lg" />
     </article>
   )
 }
@@ -175,6 +181,7 @@ export function StoryWizard({ storyId, onComplete }: StoryWizardProps) {
   const queryClient = useQueryClient()
   const [messages, setMessages] = useState<StorySetupMessage[]>([])
   const [input, setInput] = useState('')
+  const [pendingImages, setPendingImages] = useState<ChatImageAttachment[]>([])
   const [streamingText, setStreamingText] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -289,12 +296,18 @@ export function StoryWizard({ storyId, onComplete }: StoryWizardProps) {
 
   const send = useCallback((content: string) => {
     const trimmed = content.trim()
-    if (!trimmed || isStreaming) return
-    const history: StorySetupMessage[] = [...messages, { role: 'user', content: trimmed }]
+    if ((!trimmed && pendingImages.length === 0) || isStreaming) return
+    const userMessage: StorySetupMessage = {
+      role: 'user',
+      content: trimmed,
+      ...(pendingImages.length > 0 ? { images: pendingImages } : {}),
+    }
+    const history: StorySetupMessage[] = [...messages, userMessage]
     setMessages(history)
     setInput('')
+    setPendingImages([])
     requestAssistant(history)
-  }, [isStreaming, messages, requestAssistant])
+  }, [isStreaming, messages, pendingImages, requestAssistant])
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault()
@@ -340,7 +353,7 @@ export function StoryWizard({ storyId, onComplete }: StoryWizardProps) {
                 {messages.map((message, index) => message.role === 'assistant' ? (
                   <AssistantTurn key={`assistant-${index}`} content={message.content} />
                 ) : (
-                  <WriterTurn key={`user-${index}`} content={message.content} />
+                  <WriterTurn key={`user-${index}`} message={message} />
                 ))}
 
                 {isStreaming && <AssistantTurn content={streamingText} streaming={Boolean(streamingText)} />}
@@ -391,6 +404,7 @@ export function StoryWizard({ storyId, onComplete }: StoryWizardProps) {
             className="min-w-0 lg:col-start-1"
             data-component-id="story-setup-composer-column"
           >
+              <ChatImagePicker images={pendingImages} onChange={setPendingImages} disabled={isStreaming} />
               <div className="flex items-end gap-2 rounded-xl border border-border/55 bg-card/25 p-2 focus-within:border-foreground/35">
                 <Textarea
                   ref={textareaRef}
@@ -415,7 +429,12 @@ export function StoryWizard({ storyId, onComplete }: StoryWizardProps) {
                     <Square className="size-3 fill-current" aria-hidden />
                   </Button>
                 ) : (
-                  <Button type="submit" size="icon-sm" disabled={!input.trim()} aria-label="Send message">
+                  <Button
+                    type="submit"
+                    size="icon-sm"
+                    disabled={!input.trim() && pendingImages.length === 0}
+                    aria-label="Send message"
+                  >
                     <ArrowUp className="size-4" aria-hidden />
                   </Button>
                 )}

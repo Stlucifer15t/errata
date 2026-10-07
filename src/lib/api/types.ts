@@ -1,5 +1,8 @@
 // API Types
 
+import type { ChatImageAttachment } from '../chat-image'
+export type { ChatImageAttachment, ChatImageMediaType } from '../chat-image'
+
 export interface CustomFragmentType {
   type: string
   name: string
@@ -237,7 +240,7 @@ export interface LibrarianAcceptSuggestionResponse {
 }
 
 export interface ChatHistory {
-  messages: Array<{ role: 'user' | 'assistant'; content: string; reasoning?: string }>
+  messages: Array<{ role: 'user' | 'assistant'; content: string; reasoning?: string; images?: ChatImageAttachment[] }>
   updatedAt: string
 }
 
@@ -491,6 +494,7 @@ export interface CharacterChatMessage {
   role: 'user' | 'assistant'
   content: string
   reasoning?: string
+  images?: ChatImageAttachment[]
   createdAt: string
 }
 

@@ -1,4 +1,5 @@
 import { apiFetch, fetchEventStream, fetchGetEventStream } from './client'
+import type { ChatMessageInput } from '../chat-message'
 import type {
   LibrarianState,
   LibrarianAnalysisSummary,
@@ -53,7 +54,7 @@ export const librarian = {
     contextAfter: options?.contextAfter,
     instruction: options?.instruction,
   }),
-  chat: (storyId: string, messages: Array<{ role: 'user' | 'assistant'; content: string }>) =>
+  chat: (storyId: string, messages: ChatMessageInput[]) =>
     fetchEventStream(`/stories/${storyId}/librarian/chat`, { messages }),
   getChatHistory: (storyId: string) =>
     apiFetch<ChatHistory>(`/stories/${storyId}/librarian/chat`),
@@ -75,6 +76,6 @@ export const librarian = {
     }),
   getConversationHistory: (storyId: string, conversationId: string) =>
     apiFetch<ChatHistory>(`/stories/${storyId}/librarian/conversations/${conversationId}/chat`),
-  conversationChat: (storyId: string, conversationId: string, messages: Array<{ role: 'user' | 'assistant'; content: string }>) =>
+  conversationChat: (storyId: string, conversationId: string, messages: ChatMessageInput[]) =>
     fetchEventStream(`/stories/${storyId}/librarian/conversations/${conversationId}/chat`, { messages }),
 }

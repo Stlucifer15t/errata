@@ -1,10 +1,11 @@
 import { createStreamingRunner } from '../agents/create-streaming-runner'
+import { chatMessagesToModelMessages, type ChatMessageInput } from '@/lib/chat-message'
 import { tool } from 'ai'
 import { StorySetupSnapshotSchema } from './schema'
 import { listStorySetupFragmentContext, syncStorySetupSnapshot } from './sync'
 
 export interface StorySetupChatOptions {
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  messages: ChatMessageInput[]
 }
 
 export const storySetupChat = createStreamingRunner<StorySetupChatOptions>({
@@ -37,7 +38,7 @@ export const storySetupChat = createStreamingRunner<StorySetupChatOptions>({
   toolChoice: 'auto',
   maxSteps: 3,
   messages: ({ opts }) => opts.messages.length > 0
-    ? opts.messages
+    ? chatMessagesToModelMessages(opts.messages)
     : [{
         role: 'user',
         content: 'Begin the story setup conversation. Ask what starting point I have, and make it clear that an incomplete idea is welcome.',

@@ -6,7 +6,7 @@ import {
 } from '@/components/wizard/story-setup-session'
 
 class MemoryStorage {
-  private values = new Map<string, string>()
+  protected values = new Map<string, string>()
 
   getItem(key: string) {
     return this.values.get(key) ?? null
@@ -17,10 +17,21 @@ class MemoryStorage {
   }
 }
 
+class QuotaLimitedStorage extends MemoryStorage {
+  setItem(key: string, value: string) {
+    if (value.length > 3000) throw new Error('QuotaExceededError')
+    super.setItem(key, value)
+  }
+}
+
 const session: StorySetupSession = {
   messages: [
     { role: 'assistant', content: 'What are you starting with?' },
-    { role: 'user', content: 'A courier carrying a stolen memory.' },
+    {
+      role: 'user',
+      content: 'A courier carrying a stolen memory.',
+      images: [{ name: 'moodboard.png', mediaType: 'image/png', data: 'AQID' }],
+    },
   ],
   checklist: [{ key: 'starting-point', status: 'covered', note: 'A rough premise' }],
   draftFragments: [{
@@ -41,6 +52,24 @@ describe('story setup session', () => {
 
     expect(readStorySetupSession(storage, 'story-test')).toEqual(session)
     expect(readStorySetupSession(storage, 'another-story')).toBeNull()
+  })
+
+  it('falls back to a text transcript if image data exceeds browser storage quota', () => {
+    const storage = new QuotaLimitedStorage()
+    const largeImageSession: StorySetupSession = {
+      ...session,
+      messages: [{
+        role: 'user',
+        content: 'Read this picture.',
+        images: [{ name: 'reference.png', mediaType: 'image/png', data: 'A'.repeat(4000) }],
+      }],
+    }
+
+    writeStorySetupSession(storage, 'story-test', largeImageSession)
+
+    const restored = readStorySetupSession(storage, 'story-test')
+    expect(restored?.messages[0].content).toContain('[Image reference.png was not retained in this browser session.]')
+    expect(restored?.messages[0].images).toBeUndefined()
   })
 
   it('ignores malformed saved state', () => {

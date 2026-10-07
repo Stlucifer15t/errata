@@ -14,6 +14,7 @@ Join the community on Discord: https://discord.gg/ywVFKvdH49
 - **Per-role model selection** — assign different providers and models—including native Google Gemini—to generation, librarian, character chat, directions, and individual agents with automatic fallback chains
 - **Story direction suggestions** — AI-generated "what happens next?" options with customizable prompt templates and guided direction mode
 - **Character Chat mode** — story-scoped chat with streaming responses, provider/model selection, and character portraits
+- **Image-aware chat** — attach PNG, JPEG, WebP, or GIF images in Story Setup, Librarian Chat, or Character Chat; each message accepts up to four images (4 MB each) and requires a vision-capable model
 - **Block-based context** — visual editor for reordering, overriding, and extending LLM prompt structure, including JavaScript-powered script blocks with live preview
 - **Agent context panel** — per-agent block editor for customizing any agent's prompt, disabling tools, and setting model overrides
 - **Librarian memory tools** — rolling continuity, hierarchical summaries, contradiction tracking, and summary compaction controls

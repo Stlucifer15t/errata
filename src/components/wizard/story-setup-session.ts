@@ -1,4 +1,5 @@
 import { z } from 'zod/v4'
+import { ChatMessageSchema } from '@/lib/chat-message'
 import type {
   StorySetupChecklistItem,
   StorySetupDraftFragment,
@@ -11,10 +12,7 @@ interface StorageLike {
 }
 
 const StorySetupSessionSchema = z.object({
-  messages: z.array(z.object({
-    role: z.enum(['user', 'assistant']),
-    content: z.string(),
-  })),
+  messages: z.array(ChatMessageSchema),
   checklist: z.array(z.object({
     key: z.enum(['starting-point', 'premise', 'characters', 'goal', 'setting', 'voice', 'opening']),
     status: z.enum(['missing', 'partial', 'covered']),
@@ -52,9 +50,29 @@ export function readStorySetupSession(storage: StorageLike, storyId: string): St
 }
 
 export function writeStorySetupSession(storage: StorageLike, storyId: string, session: StorySetupSession): void {
+  const key = sessionKey(storyId)
   try {
-    storage.setItem(sessionKey(storyId), JSON.stringify(session))
+    storage.setItem(key, JSON.stringify(session))
   } catch {
-    // Setup remains usable if browser storage is unavailable or full.
+    // Keep the text transcript if image data pushes localStorage over its quota.
+    const textOnlySession: StorySetupSession = {
+      ...session,
+      messages: session.messages.map((message) => {
+        if (!message.images?.length) return message
+        const imageNote = message.images
+          .map(image => `[Image ${image.name} was not retained in this browser session.]`)
+          .join('\n')
+        return {
+          role: message.role,
+          content: [message.content, imageNote].filter(Boolean).join('\n'),
+        }
+      }),
+    }
+
+    try {
+      storage.setItem(key, JSON.stringify(textOnlySession))
+    } catch {
+      // Setup remains usable if browser storage is unavailable or full.
+    }
   }
 }

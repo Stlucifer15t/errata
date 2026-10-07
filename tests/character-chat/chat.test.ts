@@ -303,6 +303,44 @@ describe('character chat endpoints', () => {
       expect(finishEvent).toBeDefined()
     })
 
+    it('sends image attachments to the selected vision model and persists them', async () => {
+      const story = makeStory()
+      await createStory(dataDir, story)
+      await createFragment(dataDir, story.id, makeFragment())
+
+      const createRes = await createTestConversation(story.id)
+      const conv = await createRes.json()
+      mockSimpleResponse()
+
+      const image = { name: 'reference.png', mediaType: 'image/png', data: 'AQID' }
+      const res = await app.fetch(
+        new Request(`http://localhost/api/stories/${story.id}/character-chat/conversations/${conv.id}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: [{ role: 'user', content: 'Describe this.', images: [image] }] }),
+        }),
+      )
+
+      expect(res.status).toBe(200)
+      await readNdjsonStream(res)
+      expect(mockAgentStream).toHaveBeenCalledWith(expect.objectContaining({
+        messages: expect.arrayContaining([{
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Describe this.' },
+            { type: 'image', image: 'AQID', mediaType: 'image/png' },
+          ],
+        }]),
+      }))
+
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      const savedRes = await app.fetch(
+        new Request(`http://localhost/api/stories/${story.id}/character-chat/conversations/${conv.id}`),
+      )
+      const saved = await savedRes.json()
+      expect(saved.messages[0].images).toEqual([image])
+    })
+
     it('streams reasoning events', async () => {
       const story = makeStory()
       await createStory(dataDir, story)

@@ -5,6 +5,7 @@ import { getContentRoot } from '../fragments/branches'
 import { generateConversationId } from '@/lib/fragment-ids'
 import { writeJsonAtomic } from '../fs-utils'
 import { withKeyLock } from '../async-lock'
+import type { ChatImageAttachment } from '@/lib/chat-image'
 
 /** Serializes read-modify-write of a story's analysis index against concurrent saves. */
 function withIndexLock<T>(storyId: string, fn: () => Promise<T>): Promise<T> {
@@ -398,6 +399,7 @@ export interface ChatHistoryMessage {
   role: 'user' | 'assistant'
   content: string
   reasoning?: string
+  images?: ChatImageAttachment[]
 }
 
 export interface ChatHistory {

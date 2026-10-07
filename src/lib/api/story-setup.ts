@@ -1,8 +1,10 @@
 import { apiFetch, fetchEventStream } from './client'
+import type { ChatImageAttachment } from './types'
 
 export interface StorySetupMessage {
   role: 'user' | 'assistant'
   content: string
+  images?: ChatImageAttachment[]
 }
 
 export type StorySetupChecklistKey =

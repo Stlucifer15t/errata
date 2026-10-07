@@ -61,6 +61,13 @@ bun scripts/build-android.mjs --no-sync      # assemble only, no cap sync
 The debug APK lands at `android/app/build/outputs/apk/debug/app-debug.apk`. Install
 with `adb install -r <apk>` or run from Android Studio with a device attached.
 
+### Build on GitHub
+
+The **Build Android APK** workflow runs when Android app source changes are pushed and
+can also be started manually from the Actions tab. Download the `errata-android-debug-apk`
+artifact from the completed run, then install the APK on your device. This is a practical
+option when you only have a phone and do not have the Android SDK installed locally.
+
 Release builds use the normal Android flow: create a signing config in
 `android/app/build.gradle` (or Android Studio > Build > Generate Signed Bundle), then
 `gradlew assembleRelease` or `bundleRelease` for the Play Store.

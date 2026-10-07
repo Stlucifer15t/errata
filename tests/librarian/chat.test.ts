@@ -376,6 +376,40 @@ describe('librarian chat endpoint', () => {
     expect(messages.some((m: { role: string; content: string }) => m.role === 'user' && m.content === 'How are you?')).toBe(true)
   })
 
+  it('passes image attachments through to the librarian model', async () => {
+    const story = makeStory()
+    await createStory(dataDir, story)
+
+    mockAgentStream.mockResolvedValue({
+      fullStream: createMockFullStream([{ type: 'finish', finishReason: 'stop', stepCount: 1 }]),
+      text: Promise.resolve(''),
+      reasoning: Promise.resolve(''),
+      toolCalls: Promise.resolve([]),
+      finishReason: Promise.resolve('stop'),
+      steps: Promise.resolve([]),
+    })
+
+    const image = { name: 'map.webp', mediaType: 'image/webp', data: 'AQID' }
+    const response = await app.fetch(
+      new Request(`http://localhost/api/stories/${story.id}/librarian/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [{ role: 'user', content: 'Read this map.', images: [image] }] }),
+      }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(mockAgentStream).toHaveBeenCalledWith(expect.objectContaining({
+      messages: expect.arrayContaining([{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Read this map.' },
+          { type: 'image', image: 'AQID', mediaType: 'image/webp' },
+        ],
+      }]),
+    }))
+  })
+
   it('includes chat system prompt', async () => {
     const story = makeStory()
     await createStory(dataDir, story)

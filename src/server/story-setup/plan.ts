@@ -1,5 +1,6 @@
 import { generateText, tool } from 'ai'
 import { z } from 'zod/v4'
+import { chatMessagesToModelMessages, type ChatMessageInput } from '@/lib/chat-message'
 import { generateFragmentId } from '@/lib/fragment-ids'
 import { getModel, buildProviderOptions } from '../llm/client'
 import { createFragment, getStory, listFragments, updateStory } from '../fragments/storage'
@@ -24,10 +25,7 @@ export const StorySetupPlanSchema = z.object({
 
 export type StorySetupPlan = z.infer<typeof StorySetupPlanSchema>
 
-export interface StorySetupMessage {
-  role: 'user' | 'assistant'
-  content: string
-}
+export type StorySetupMessage = ChatMessageInput
 
 export interface CreatedSetupFragment {
   id: string
@@ -84,7 +82,7 @@ ${draftFragments.length > 0 ? JSON.stringify(draftFragments, null, 2) : '(None y
 
 Treat the provisional fragments as reviewed working material. Preserve their supported decisions and improve their completeness without silently changing their meaning.`,
     messages: [
-      ...messages,
+      ...chatMessagesToModelMessages(messages),
       {
         role: 'user',
         content: 'Create the validated starter plan now and submit it with the provided tool.',

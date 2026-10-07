@@ -1,4 +1,5 @@
 import { apiFetch, fetchEventStream } from './client'
+import type { ChatMessageInput } from '../chat-message'
 import type {
   CharacterChatConversation,
   CharacterChatConversationSummary,
@@ -44,7 +45,7 @@ export const characterChat = {
   chat: (
     storyId: string,
     conversationId: string,
-    messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+    messages: ChatMessageInput[],
   ) =>
     fetchEventStream(
       `/stories/${storyId}/character-chat/conversations/${conversationId}/chat`,

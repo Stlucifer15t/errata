@@ -1,5 +1,6 @@
 import { getFragment } from '../fragments/storage'
 import { instructionRegistry } from '../instructions'
+import { chatMessagesToModelMessages, type ChatMessageInput } from '@/lib/chat-message'
 import { createStreamingRunner } from '../agents/create-streaming-runner'
 import type { Fragment } from '../fragments/schema'
 import type { PersonaMode } from './storage'
@@ -28,7 +29,7 @@ export interface CharacterChatOptions {
   characterId: string
   persona: PersonaMode
   storyPointFragmentId: string | null
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  messages: ChatMessageInput[]
   maxSteps?: number
 }
 
@@ -72,9 +73,5 @@ export const characterChat = createStreamingRunner<CharacterChatOptions, { chara
     ),
   }),
 
-  messages: ({ opts }) =>
-    opts.messages.map((m) => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    })),
+  messages: ({ opts }) => chatMessagesToModelMessages(opts.messages),
 })

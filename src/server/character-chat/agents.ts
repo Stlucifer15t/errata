@@ -1,4 +1,5 @@
 import { z } from 'zod/v4'
+import { ChatMessageSchema } from '@/lib/chat-message'
 import { agentRegistry } from '../agents/registry'
 import { agentBlockRegistry } from '../agents/agent-block-registry'
 import { modelRoleRegistry } from '../agents/model-role-registry'
@@ -17,10 +18,7 @@ const ChatInputSchema = z.object({
   characterId: z.string(),
   persona: PersonaModeSchema,
   storyPointFragmentId: z.string().nullable(),
-  messages: z.array(z.object({
-    role: z.union([z.literal('user'), z.literal('assistant')]),
-    content: z.string(),
-  })),
+  messages: z.array(ChatMessageSchema),
   maxSteps: z.int().positive().optional(),
 })
 

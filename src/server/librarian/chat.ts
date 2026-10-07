@@ -1,4 +1,4 @@
-import { tool, ToolLoopAgent, stepCountIs } from 'ai'
+import { tool, ToolLoopAgent, stepCountIs, type ModelMessage } from 'ai'
 import { z } from 'zod/v4'
 import { getModel } from '../llm/client'
 import { getFragment, getStory } from '../fragments/storage'
@@ -14,6 +14,7 @@ import { getFragmentsByTag } from '../fragments/associations'
 import { inspectGenerationForFragment, type InspectAspect } from './inspect-generation'
 import { runLibrarian } from './agent'
 import { withBranch } from '../fragments/branches'
+import { chatMessagesToModelMessages, type ChatMessageInput } from '@/lib/chat-message'
 import type { ChatStreamEvent, ChatResult } from '../agents/stream-types'
 import type { AgentBlockContext } from '../agents/agent-block-context'
 
@@ -21,10 +22,7 @@ export type { ChatStreamEvent, ChatResult }
 
 const logger = createLogger('librarian-chat')
 
-export interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
-}
+export type ChatMessage = ChatMessageInput
 
 export interface ChatOptions {
   messages: ChatMessage[]
@@ -186,13 +184,10 @@ async function librarianChatInner(
   })
 
   // Build messages: context as first user message, then conversation history
-  const aiMessages = [
-    { role: 'user' as const, content: `Here is the current story context for reference:\n\n${userMessage?.content ?? ''}\n\nI'm ready to chat about this story. Please acknowledge briefly.` },
-    { role: 'assistant' as const, content: 'I have the story context. How can I help you with your fragments?' },
-    ...opts.messages.map((m) => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    })),
+  const aiMessages: ModelMessage[] = [
+    { role: 'user', content: `Here is the current story context for reference:\n\n${userMessage?.content ?? ''}\n\nI'm ready to chat about this story. Please acknowledge briefly.` },
+    { role: 'assistant', content: 'I have the story context. How can I help you with your fragments?' },
+    ...chatMessagesToModelMessages(opts.messages),
   ]
 
   // Stream with write tools

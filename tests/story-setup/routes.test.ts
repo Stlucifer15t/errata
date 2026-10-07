@@ -261,6 +261,31 @@ describe('story setup routes', () => {
     }))
   })
 
+  it('sends story-reference images to the setup model', async () => {
+    mockChatResponse('I can see the reference. What should it inspire?')
+    const image = { name: 'moodboard.jpg', mediaType: 'image/jpeg', data: 'AQID' }
+
+    const response = await app.fetch(new Request(
+      'http://localhost/api/stories/story-setup-test/setup/chat',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [{ role: 'user', content: 'Use this as a mood reference.', images: [image] }] }),
+      },
+    ))
+
+    expect(response.status).toBe(200)
+    expect(mockAgentStream).toHaveBeenCalledWith(expect.objectContaining({
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Use this as a mood reference.' },
+          { type: 'image', image: 'AQID', mediaType: 'image/jpeg' },
+        ],
+      }],
+    }))
+  })
+
   it('passes the full setup conversation back to the model', async () => {
     mockChatResponse('What does Mara want badly enough to risk that?')
     const messages = [
@@ -313,7 +338,11 @@ describe('story setup routes', () => {
         body: JSON.stringify({
           messages: [
             { role: 'assistant', content: 'What are you starting with?' },
-            { role: 'user', content: 'A courier named Mara carrying a stolen memory.' },
+            {
+              role: 'user',
+              content: 'A courier named Mara carrying a stolen memory.',
+              images: [{ name: 'memory-art.png', mediaType: 'image/png', data: 'AQID' }],
+            },
           ],
           draftFragments: [{
             key: 'mara',
@@ -329,6 +358,13 @@ describe('story setup routes', () => {
     expect(response.status).toBe(200)
     expect(mockGenerateText).toHaveBeenCalledWith(expect.objectContaining({
       system: expect.stringContaining('Mara Venn'),
+      messages: expect.arrayContaining([{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'A courier named Mara carrying a stolen memory.' },
+          { type: 'image', image: 'AQID', mediaType: 'image/png' },
+        ],
+      }]),
       tools: expect.objectContaining({ submitStorySetupPlan: expect.anything() }),
       toolChoice: { type: 'tool', toolName: 'submitStorySetupPlan' },
     }))

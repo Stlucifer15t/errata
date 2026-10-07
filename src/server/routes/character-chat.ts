@@ -11,6 +11,7 @@ import {
 } from '../character-chat/storage'
 import { createLogger } from '../logging'
 import { encodeStream } from './encode-stream'
+import { chatMessageBodySchema } from './chat-schema'
 
 export function characterChatRoutes(dataDir: string) {
   const logger = createLogger('api:character-chat', { dataDir })
@@ -131,8 +132,10 @@ export function characterChatRoutes(dataDir: string) {
               ...body.messages.map((m) => ({
                 role: m.role as 'user' | 'assistant',
                 content: m.content,
+                ...(m.images?.length ? { images: m.images } : {}),
                 createdAt: now,
               })),
+
               {
                 role: 'assistant' as const,
                 content: result.text,
@@ -159,10 +162,7 @@ export function characterChatRoutes(dataDir: string) {
     }, {
       detail: { summary: 'Send a message (streaming NDJSON)' },
       body: t.Object({
-        messages: t.Array(t.Object({
-          role: t.Union([t.Literal('user'), t.Literal('assistant')]),
-          content: t.String(),
-        })),
+        messages: t.Array(chatMessageBodySchema),
       }),
     })
 }

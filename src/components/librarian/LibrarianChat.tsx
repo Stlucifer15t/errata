@@ -6,11 +6,14 @@ import { Textarea } from '@/components/ui/textarea'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Send, Loader2 } from 'lucide-react'
 import { EmptyHint } from '@/components/ui/prose-text'
+import { ChatImagePicker } from '@/components/chat/ChatImagePicker'
 import {
   AssistantMessageView,
+  UserMessageView,
   type AssistantMessage,
   type ChatMessage,
 } from '@/components/chat/ChatMessageParts'
+import type { ChatImageAttachment } from '@/lib/chat-image'
 
 interface LibrarianChatProps {
   storyId: string
@@ -22,6 +25,7 @@ export function LibrarianChat({ storyId, conversationId, initialInput }: Librari
   const queryClient = useQueryClient()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
+  const [pendingImages, setPendingImages] = useState<ChatImageAttachment[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -35,6 +39,7 @@ export function LibrarianChat({ storyId, conversationId, initialInput }: Librari
     if (prevConversationIdRef.current !== conversationId) {
       prevConversationIdRef.current = conversationId
       setMessages([])
+      setPendingImages([])
       setLoaded(false)
       setError(null)
     }
@@ -119,12 +124,17 @@ export function LibrarianChat({ storyId, conversationId, initialInput }: Librari
 
   const handleSend = useCallback(async () => {
     const text = input.trim()
-    if (!text || isStreaming) return
+    if ((!text && pendingImages.length === 0) || isStreaming) return
 
     setInput('')
+    setPendingImages([])
     setError(null)
 
-    const userMessage: ChatMessage = { role: 'user', content: text }
+    const userMessage: ChatMessage = {
+      role: 'user',
+      content: text,
+      ...(pendingImages.length > 0 ? { images: pendingImages } : {}),
+    }
     const updatedMessages = [...messages, userMessage]
     setMessages(updatedMessages)
 
@@ -138,6 +148,7 @@ export function LibrarianChat({ storyId, conversationId, initialInput }: Librari
       const apiMessages = updatedMessages.map(m => ({
         role: m.role,
         content: m.content,
+        ...(m.role === 'user' && m.images?.length ? { images: m.images } : {}),
       }))
 
       const stream = conversationId
@@ -206,7 +217,7 @@ export function LibrarianChat({ storyId, conversationId, initialInput }: Librari
       setIsStreaming(false)
       textareaRef.current?.focus()
     }
-  }, [input, isStreaming, messages, storyId, conversationId, queryClient, historyQueryKey])
+  }, [input, pendingImages, isStreaming, messages, storyId, conversationId, queryClient, historyQueryKey])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -246,7 +257,7 @@ export function LibrarianChat({ storyId, conversationId, initialInput }: Librari
                     streaming={isStreaming && i === messages.length - 1}
                   />
                 ) : (
-                  <div className="break-words whitespace-pre-wrap">{msg.content}</div>
+                  <UserMessageView message={msg} />
                 )}
               </div>
             </div>
@@ -264,6 +275,7 @@ export function LibrarianChat({ storyId, conversationId, initialInput }: Librari
 
       {/* Input area */}
       <div className="border-t border-border/30 p-3 space-y-2">
+        <ChatImagePicker images={pendingImages} onChange={setPendingImages} disabled={isStreaming} />
         <div className="flex gap-2 items-end">
           <Textarea
             ref={textareaRef}
@@ -279,7 +291,7 @@ export function LibrarianChat({ storyId, conversationId, initialInput }: Librari
           <Button
             size="icon"
             className="size-8 shrink-0"
-            disabled={!input.trim() || isStreaming}
+            disabled={(!input.trim() && pendingImages.length === 0) || isStreaming}
             onClick={handleSend}
             data-component-id="librarian-chat-send"
           >

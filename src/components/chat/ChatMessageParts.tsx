@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { ChevronDown, ChevronRight, Brain, Loader2, Wrench } from 'lucide-react'
 import { StreamMarkdown } from '@/components/ui/stream-markdown'
+import { imageAttachmentDataUrl, type ChatImageAttachment } from '@/lib/chat-image'
 
 export interface ToolCallInfo {
   id: string
@@ -18,8 +19,39 @@ export interface AssistantMessage {
 }
 
 export type ChatMessage =
-  | { role: 'user'; content: string }
+  | { role: 'user'; content: string; images?: ChatImageAttachment[] }
   | AssistantMessage
+
+export function ChatImagePreviews({ images, className = '' }: { images?: ChatImageAttachment[]; className?: string }) {
+  if (!images?.length) return null
+
+  return (
+    <div className={`grid grid-cols-2 gap-2 ${className}`}>
+      {images.map((image, index) => (
+        <figure key={`${image.name}-${index}`} className="min-w-0">
+          <img
+            src={imageAttachmentDataUrl(image)}
+            alt={image.name}
+            loading="lazy"
+            className="max-h-64 w-full rounded-md border border-border/30 object-contain"
+          />
+          <figcaption className="mt-1 truncate text-[0.625rem] text-muted-foreground" title={image.name}>
+            {image.name}
+          </figcaption>
+        </figure>
+      ))}
+    </div>
+  )
+}
+
+export function UserMessageView({ message }: { message: Extract<ChatMessage, { role: 'user' }> }) {
+  return (
+    <div className="space-y-2">
+      {message.content && <div className="break-words whitespace-pre-wrap">{message.content}</div>}
+      <ChatImagePreviews images={message.images} />
+    </div>
+  )
+}
 
 export function ToolCallCard({ tc, defaultExpanded = false }: { tc: ToolCallInfo; defaultExpanded?: boolean }) {
   const [expanded, setExpanded] = useState(defaultExpanded)

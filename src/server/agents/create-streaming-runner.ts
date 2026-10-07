@@ -5,7 +5,7 @@
  * that all streaming agents share. Only the agent-specific "knobs" vary.
  */
 
-import { ToolLoopAgent, stepCountIs, type ToolSet } from 'ai'
+import { ToolLoopAgent, stepCountIs, type ModelMessage, type ToolSet } from 'ai'
 import type { StoryMeta } from '../fragments/schema'
 import type { ContextBuildState } from '../llm/context-builder'
 import type { AgentBlockContext } from './agent-block-context'
@@ -91,7 +91,7 @@ export interface StreamingRunnerConfig<TOpts, TValidated = Record<string, unknow
   messages?: (params: {
     compiled: CompiledAgentContext
     opts: TOpts
-  }) => Array<{ role: 'user' | 'assistant'; content: string }>
+  }) => ModelMessage[]
 
   /**
    * Optional post-stream hook. Called with the stream result after creation.
