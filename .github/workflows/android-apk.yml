@@ -54,7 +54,29 @@ jobs:
         run: bun install
 
       - name: Build debug APK
-        run: bun run android:apk
+        shell: bash
+        run: |
+          set +e
+          bun run android:apk 2>&1 | tee /tmp/android-build.log
+          build_status=${PIPESTATUS[0]}
+          set -e
+
+          if (( build_status != 0 )); then
+            python3 - <<'PY'
+            import re
+            from pathlib import Path
+
+            log_lines = Path('/tmp/android-build.log').read_text(errors='replace').splitlines()[-40:]
+            ansi = re.compile(r'\x1b\[[0-9;]*[A-Za-z]')
+            for line in log_lines:
+                line = ansi.sub('', line).strip()
+                if not line:
+                    continue
+                line = line[:1000].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+                print(f'::error title=Android APK build log::{line}')
+            PY
+          fi
+          exit "$build_status"
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
