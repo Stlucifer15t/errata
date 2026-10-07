@@ -62,19 +62,11 @@ jobs:
           set -e
 
           if (( build_status != 0 )); then
-            python3 - <<'PY'
-            import re
-            from pathlib import Path
-
-            log_lines = Path('/tmp/android-build.log').read_text(errors='replace').splitlines()[-40:]
-            ansi = re.compile(r'\x1b\[[0-9;]*[A-Za-z]')
-            for line in log_lines:
-                line = ansi.sub('', line).strip()
-                if not line:
-                    continue
-                line = line[:1000].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-                print(f'::error title=Android APK build log::{line}')
-            PY
+            while IFS= read -r line; do
+              line="${line//%/%25}"
+              line="${line//$'\r'/%0D}"
+              printf '::error title=Android APK build log::%s\n' "${line:0:1000}"
+            done < <(tail -n 40 /tmp/android-build.log | sed -E 's/\x1B\[[0-9;]*[A-Za-z]//g')
           fi
           exit "$build_status"
 
