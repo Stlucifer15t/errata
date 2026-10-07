@@ -35,11 +35,11 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
+        with:
+          accept-android-sdk-licenses: true
 
       - name: Install Android build tools
         run: |
-          set -o pipefail
-          yes | sdkmanager --licenses >/dev/null
           sdkmanager \
             "platform-tools" \
             "platforms;android-36" \
