@@ -91,7 +91,12 @@ function run(command, args, options = {}) {
     ...options,
   })
   if (result.status !== 0) {
-    throw new Error(`${command} ${args.join(' ')} exited with ${result.status}`)
+    const outcome = result.error
+      ? `could not start: ${result.error.message}`
+      : result.signal
+        ? `was terminated by ${result.signal}`
+        : `exited with ${result.status}`
+    throw new Error(`${command} ${args.join(' ')} ${outcome}`)
   }
 }
 
@@ -113,8 +118,9 @@ async function main() {
 
   if (args.has('--apk')) {
     console.info('[android] gradle assembleDebug')
-    const gradlew = process.platform === 'win32' ? 'gradlew.bat' : './gradlew'
-    run(gradlew, ['assembleDebug'], { cwd: join(REPO_ROOT, 'android') })
+    const gradleCommand = process.platform === 'win32' ? 'gradlew.bat' : 'bash'
+    const gradleArgs = process.platform === 'win32' ? ['assembleDebug'] : ['gradlew', 'assembleDebug']
+    run(gradleCommand, gradleArgs, { cwd: join(REPO_ROOT, 'android') })
     console.info('[android] APK: android/app/build/outputs/apk/debug/app-debug.apk')
   }
 }
