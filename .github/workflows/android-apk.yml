@@ -63,10 +63,11 @@ jobs:
 
           if (( build_status != 0 )); then
             while IFS= read -r line; do
+              [[ -z "$line" ]] && continue
               line="${line//%/%25}"
               line="${line//$'\r'/%0D}"
               printf '::error title=Android APK build log::%s\n' "${line:0:1000}"
-            done < <(tail -n 40 /tmp/android-build.log | sed -E 's/\x1B\[[0-9;]*[A-Za-z]//g')
+            done < <(tail -n 8 /tmp/android-build.log | sed -E 's/\x1B\[[0-9;]*[A-Za-z]//g')
           fi
           exit "$build_status"
 
