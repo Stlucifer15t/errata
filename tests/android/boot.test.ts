@@ -9,6 +9,7 @@ interface BootModule {
   DEFAULT_PORT: number
   installPolyfills: (target?: object) => object
   installRegExpFallback: (target?: object) => boolean
+  installTextDecoderFallback: (target?: object) => boolean
   stripPropertyEscapes: (source: string) => string
   buildServerEnv: (dataRoot: string, port?: number) => Record<string, string>
   serverUrl: (port?: number) => string
@@ -108,6 +109,49 @@ describe('android boot helpers', () => {
       const once = target.RegExp
       expect(boot.installRegExpFallback(target)).toBe(false)
       expect(target.RegExp).toBe(once)
+    })
+  })
+
+  describe('installTextDecoderFallback', () => {
+    /** Mimics V8 built without ICU: the `fatal` option is rejected with ERR_NO_ICU. */
+    function makeNoIcuTextDecoder(): typeof TextDecoder {
+      const Native = TextDecoder
+      const NoIcu = function (label?: string, options?: { fatal?: boolean }) {
+        if (options?.fatal) {
+          const error = new TypeError('"fatal" option is not supported on Node.js compiled without ICU')
+          ;(error as TypeError & { code?: string }).code = 'ERR_NO_ICU'
+          throw error
+        }
+        return new Native(label, options)
+      } as unknown as typeof TextDecoder
+      NoIcu.prototype = Native.prototype
+      return NoIcu
+    }
+
+    it('is a no-op on a runtime with ICU', () => {
+      const target = { TextDecoder }
+      expect(boot.installTextDecoderFallback(target)).toBe(false)
+      expect(target.TextDecoder).toBe(TextDecoder)
+    })
+
+    it('drops the fatal option on a runtime without ICU', () => {
+      const target = { TextDecoder: makeNoIcuTextDecoder() }
+      expect(boot.installTextDecoderFallback(target)).toBe(true)
+
+      const decoder = new target.TextDecoder('utf-8', { fatal: true })
+      expect(decoder).toBeInstanceOf(TextDecoder)
+      expect(decoder.decode(new TextEncoder().encode('ok'))).toBe('ok')
+
+      // Decoders without the fatal option pass straight through.
+      expect(new target.TextDecoder().decode(new TextEncoder().encode('plain'))).toBe('plain')
+    })
+
+    it('does not double-wrap when installed twice', () => {
+      const target = { TextDecoder: makeNoIcuTextDecoder() }
+      boot.installTextDecoderFallback(target)
+      const once = target.TextDecoder
+      expect(boot.installTextDecoderFallback(target)).toBe(false)
+      expect(target.TextDecoder).toBe(once)
     })
   })
 

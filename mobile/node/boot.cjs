@@ -32,6 +32,7 @@ function installPolyfills(target = globalThis) {
     target.crypto = webcrypto
   }
   installRegExpFallback(target)
+  installTextDecoderFallback(target)
   return target
 }
 
@@ -106,6 +107,40 @@ function installRegExpFallback(target = globalThis) {
 }
 
 /**
+ * Node.js for Mobile Apps is compiled without ICU, so `new TextDecoder(label,
+ * { fatal: true })` throws ERR_NO_ICU — and `new TextDecoder('utf-8')` silently
+ * cannot honor `fatal`. TanStack's router bundle constructs such a decoder at
+ * import time, which would take the whole server down. When the runtime rejects
+ * the `fatal` option, wrap the constructor so `fatal` is dropped (decoding
+ * becomes non-fatal, which the router's request parsing tolerates). Returns
+ * true when the fallback was installed.
+ */
+function installTextDecoderFallback(target = globalThis) {
+  const Native = target.TextDecoder
+  if (typeof Native !== 'function') return false
+  try {
+    new Native('utf-8', { fatal: true })
+    return false
+  } catch (error) {
+    if (error?.code !== 'ERR_NO_ICU') throw error
+  }
+  if (Native.__errataFallback) return false
+
+  const Patched = function TextDecoder(label, options) {
+    if (options && typeof options === 'object' && 'fatal' in options) {
+      const { fatal, ...rest } = options
+      return new Native(label, rest)
+    }
+    return new Native(label, options)
+  }
+  Patched.prototype = Native.prototype
+  Object.setPrototypeOf(Patched, Native)
+  Object.defineProperty(Patched, '__errataFallback', { value: true })
+  target.TextDecoder = Patched
+  return true
+}
+
+/**
  * Environment for the server process. Everything persistent lives under the
  * app's private data directory (the Node project directory itself is replaced on
  * app updates). The server binds to loopback only; nothing is exposed on the LAN
@@ -164,6 +199,7 @@ module.exports = {
   LOOPBACK,
   installPolyfills,
   installRegExpFallback,
+  installTextDecoderFallback,
   stripPropertyEscapes,
   buildServerEnv,
   serverUrl,
