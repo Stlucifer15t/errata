@@ -31,7 +31,7 @@ android {
     }
     signingConfigs {
         debug {
-            storeFile file('errata-debug.keystore')
+            storeFile file('../errata-debug.keystore')
             storePassword 'android'
             keyAlias 'androiddebugkey'
             keyPassword 'android'
