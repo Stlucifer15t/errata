@@ -475,23 +475,26 @@ function StoryEditorPage() {
       }
 
       if (cardBuffers.length > 0) {
-        // Check if the first card has a character_book — route to full import dialog
-        const parsed = extractParsedCard(cardBuffers[0])
-        if (parsed && parsed.book && parsed.book.entries.length > 0) {
-          // PNG with lorebook → CharacterCardImportDialog
-          const bytes = new Uint8Array(cardBuffers[0])
-          let binary = ''
-          for (let i = 0; i < bytes.length; i++) {
-            binary += String.fromCharCode(bytes[i])
+        // Multiple cards → batch review dialog (handles any mix of cards).
+        // A single card with a lorebook → full import dialog with per-entry
+        // type/enable review; a single plain card → batch dialog.
+        if (cardBuffers.length === 1) {
+          const parsed = extractParsedCard(cardBuffers[0])
+          if (parsed && parsed.book && parsed.book.entries.length > 0) {
+            // PNG with lorebook → CharacterCardImportDialog
+            const bytes = new Uint8Array(cardBuffers[0])
+            let binary = ''
+            for (let i = 0; i < bytes.length; i++) {
+              binary += String.fromCharCode(bytes[i])
+            }
+            setCardImportImageUrl(`data:image/png;base64,${btoa(binary)}`)
+            setCardImportData(parsed)
+            setShowCardImport(true)
+            return
           }
-          setCardImportImageUrl(`data:image/png;base64,${btoa(binary)}`)
-          setCardImportData(parsed)
-          setShowCardImport(true)
-        } else {
-          // PNG without lorebook → existing TavernCardImportDialog
-          setTavernImportBuffers(cardBuffers)
-          setShowTavernImport(true)
         }
+        setTavernImportBuffers(cardBuffers)
+        setShowTavernImport(true)
         return
       }
 

@@ -44,6 +44,7 @@ export function TavernCardImportDialog({
   const [cards, setCards] = useState<ParsedCard[]>([])
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [parseError, setParseError] = useState<string | null>(null)
+  const [importImages, setImportImages] = useState(false)
 
   useEffect(() => {
     if (!open) {
@@ -98,27 +99,31 @@ export function TavernCardImportDialog({
   }, [])
 
   const handleFiles = useCallback(async (files: File[]) => {
-    // Check if any file is JSON — route to CharacterCardImportDialog
+    // JSON cards parse per-file so every JSON card in the selection joins the
+    // batch review list instead of only the first one hijacking the drop.
+    const jsonBuffers: ArrayBuffer[] = []
+    const pngBuffers: ArrayBuffer[] = []
     for (const file of files) {
-      if (file.name.toLowerCase().endsWith('.json') || file.type === 'application/json') {
+      try {
+        const buffer = await file.arrayBuffer()
+        if (file.name.toLowerCase().endsWith('.json') || file.type === 'application/json') {
+          jsonBuffers.push(buffer)
+        } else {
+          pngBuffers.push(buffer)
+        }
+      } catch { /* skip unreadable */ }
+    }
+
+    if (jsonBuffers.length > 0 && onJsonCardDetected) {
+      for (const buffer of jsonBuffers) {
         try {
-          const text = await file.text()
-          const parsed = parseCardJson(text)
-          if (parsed && onJsonCardDetected) {
-            onJsonCardDetected(parsed)
-            return
-          }
+          const parsed = parseCardJson(new TextDecoder().decode(buffer))
+          if (parsed) onJsonCardDetected(parsed)
         } catch { /* not a valid JSON card */ }
       }
     }
 
-    const buffers: ArrayBuffer[] = []
-    for (const file of files) {
-      try {
-        buffers.push(await file.arrayBuffer())
-      } catch { /* skip unreadable */ }
-    }
-    if (buffers.length > 0) parseBuffers(buffers)
+    if (pngBuffers.length > 0) parseBuffers(pngBuffers)
   }, [parseBuffers, onJsonCardDetected])
 
   const toggleCard = useCallback((index: number) => {
@@ -149,22 +154,26 @@ export function TavernCardImportDialog({
     mutationFn: async (toImport: ParsedCard[]) => {
       const results = []
       for (const { character, imageDataUrl } of toImport) {
-        const imageFragment = await api.fragments.create(storyId, {
-          type: 'image',
-          name: `${character.name} (card image)`,
-          description: `Character card image for ${character.name}`.slice(0, 250),
-          content: imageDataUrl,
-        })
+        // Card images are opt-in: most decks ship the same stock art that is
+        // already embedded in the card, and each one becomes an image fragment
+        // the user would have to clean up afterwards.
+        const meta: Record<string, unknown> = { ...character.meta }
+        if (importImages) {
+          const imageFragment = await api.fragments.create(storyId, {
+            type: 'image',
+            name: `${character.name} (card image)`,
+            description: `Character card image for ${character.name}`.slice(0, 250),
+            content: imageDataUrl,
+          })
+          meta.visualRefs = [{ fragmentId: imageFragment.id, kind: 'image' }]
+        }
         const charFragment = await api.fragments.create(storyId, {
           type: character.type,
           name: character.name,
           description: character.description,
           content: character.content,
           tags: character.tags,
-          meta: {
-            ...character.meta,
-            visualRefs: [{ fragmentId: imageFragment.id, kind: 'image' }],
-          },
+          meta,
         })
         results.push(charFragment)
       }
@@ -239,6 +248,18 @@ export function TavernCardImportDialog({
       )}
 
       <FileDropDialog.Errors>{parseError}</FileDropDialog.Errors>
+
+      {hasCards && (
+        <label className="flex items-center gap-2 px-1 pb-2 text-xs text-muted-foreground cursor-pointer select-none" data-component-id="tavern-import-images-toggle">
+          <input
+            type="checkbox"
+            checked={importImages}
+            onChange={(e) => setImportImages(e.target.checked)}
+            className="size-3.5 accent-[var(--primary)]"
+          />
+          Also import card images (creates an image fragment per card)
+        </label>
+      )}
 
       <FileDropDialog.Actions
         meta={hasCards ? `${selected.size} of ${cards.length} selected` : undefined}
