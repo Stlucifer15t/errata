@@ -43,6 +43,17 @@ export const fragments = {
     apiFetch<{ ok: boolean; sticky: boolean }>(`/stories/${storyId}/fragments/${fragmentId}/sticky`, {
       method: 'PATCH', body: JSON.stringify({ sticky }),
     }),
+  // Global fragments (apply across every story)
+  listGlobal: (type?: string) =>
+    apiFetch<{ fragments: Fragment[] }>(`/global-fragments${type ? `?type=${encodeURIComponent(type)}` : ''}`),
+  makeGlobal: (storyId: string, fragmentId: string) =>
+    apiFetch<{ ok: boolean; globalFragment: Fragment }>(`/stories/${storyId}/fragments/${fragmentId}/make-global`, {
+      method: 'POST',
+    }),
+  removeGlobal: (type: string, fragmentId: string) =>
+    apiFetch<{ ok: boolean }>(`/global-fragments/${encodeURIComponent(type)}/${fragmentId}`, {
+      method: 'DELETE',
+    }),
   // Revert
   revert: (storyId: string, fragmentId: string) =>
     apiFetch<Fragment>(`/stories/${storyId}/fragments/${fragmentId}/revert`, { method: 'POST' }),

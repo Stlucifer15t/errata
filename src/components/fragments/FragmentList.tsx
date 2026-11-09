@@ -17,7 +17,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Pin, GripVertical, FileDown, UserPlus, Archive, FolderPlus, ChevronRight, MoreHorizontal, Pencil, Trash2, FolderOpen, ListFilter } from 'lucide-react'
+import { Plus, Pin, GripVertical, FileDown, UserPlus, Archive, FolderPlus, ChevronRight, MoreHorizontal, Pencil, Trash2, FolderOpen, ListFilter, Globe, GlobeLock } from 'lucide-react'
 import { Caption } from '@/components/ui/prose-text'
 
 interface FragmentListProps {
@@ -60,7 +60,10 @@ interface FragmentRowProps {
   mediaById: Map<string, Fragment>
   onSelect: (fragment: Fragment) => void
   onPin: (fragment: Fragment) => void
+  onMakeGlobal: (fragment: Fragment) => void
   pinPending: boolean
+  globalPending: boolean
+  isGlobal: boolean
   onDragStart: (index: number, e: React.DragEvent) => void
   onDragEnter: (index: number) => void
   onDragEnd: () => void
@@ -76,7 +79,10 @@ const FragmentRow = memo(function FragmentRow({
   mediaById,
   onSelect,
   onPin,
+  onMakeGlobal,
   pinPending,
+  globalPending,
+  isGlobal,
   onDragStart,
   onDragEnter,
   onDragEnd,
@@ -153,6 +159,11 @@ const FragmentRow = memo(function FragmentRow({
               pinned
             </Badge>
           )}
+          {isGlobal && (
+            <Badge variant="outline" className="text-[0.5625rem] h-3.5 px-1 text-primary border-primary/40">
+              global
+            </Badge>
+          )}
           {fragment.sticky && fragment.placement === 'system' && (
             <Badge variant="outline" className="text-[0.5625rem] h-3.5 px-1">
               sys
@@ -190,6 +201,27 @@ const FragmentRow = memo(function FragmentRow({
       >
         <Pin className={`size-3.5 ${fragment.sticky ? 'fill-current' : ''}`} />
       </Button>
+      {/* Global toggle — only for shareable types */}
+      {['character', 'guideline', 'knowledge'].includes(fragment.type) && (
+        <Button
+          size="icon"
+          variant="ghost"
+          data-component-id={fragmentComponentId(fragment, 'global-toggle')}
+          className={`size-6 shrink-0 transition-opacity ${
+            isGlobal
+              ? 'opacity-100 text-primary'
+              : 'opacity-0 group-hover:opacity-50 hover:opacity-100 hover:text-foreground'
+          }`}
+          onClick={(e) => {
+            e.stopPropagation()
+            onMakeGlobal(fragment)
+          }}
+          disabled={globalPending}
+          title={isGlobal ? 'Remove from global (applies to every story)' : 'Make global — include in every story\'s context'}
+        >
+          {isGlobal ? <GlobeLock className="size-3.5" /> : <Globe className="size-3.5" />}
+        </Button>
+      )}
     </div>
   )
 })
@@ -497,6 +529,27 @@ export function FragmentList({
 
   const fragmentsQueryKey = ['fragments', storyId, type, allowedTypes?.join(',') ?? 'all']
 
+  // Global fragments pool — ids here are the "is global" markers for rows.
+  const { data: globalData } = useQuery({
+    queryKey: ['global-fragments'],
+    queryFn: () => api.fragments.listGlobal(),
+    staleTime: 5_000,
+  })
+  const globalIds = useMemo(
+    () => new Set((globalData?.fragments ?? []).map((f) => f.id)),
+    [globalData],
+  )
+
+  const makeGlobalMutation = useMutation({
+    mutationFn: async ({ fragment, makeGlobal }: { fragment: Fragment; makeGlobal: boolean }) =>
+      makeGlobal
+        ? api.fragments.makeGlobal(storyId, fragment.id)
+        : api.fragments.removeGlobal(fragment.type, fragment.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['global-fragments'] })
+    },
+  })
+
   const reorderMutation = useMutation({
     mutationFn: (items: Array<{ id: string; order: number }>) =>
       api.fragments.reorder(storyId, items),
@@ -611,6 +664,14 @@ export function FragmentList({
   const stableOnPin = useCallback((fragment: Fragment) => {
     pinMutateRef.current(fragment)
   }, [])
+
+  const makeGlobalMutateRef = useRef(makeGlobalMutation.mutate)
+  makeGlobalMutateRef.current = makeGlobalMutation.mutate
+  const stableOnMakeGlobal = useCallback((fragment: Fragment) => {
+    makeGlobalMutateRef.current({ fragment, makeGlobal: !globalIdsRef.current.has(fragment.id) })
+  }, [])
+  const globalIdsRef = useRef(globalIds)
+  globalIdsRef.current = globalIds
 
   const showType = type === undefined || !!allowedTypes?.length
   const supportsTypeFilter = type === undefined && !allowedTypes?.length
@@ -994,7 +1055,10 @@ export function FragmentList({
             mediaById={mediaById}
             onSelect={stableOnSelect}
             onPin={stableOnPin}
+            onMakeGlobal={stableOnMakeGlobal}
             pinPending={pinMutation.isPending}
+            globalPending={makeGlobalMutation.isPending}
+            isGlobal={globalIds.has(fragment.id) || !!fragment.meta?.global}
             onDragStart={handleDragStart}
             onDragEnter={handleDragEnter}
             onDragEnd={handleDragEnd}
@@ -1204,7 +1268,10 @@ export function FragmentList({
                   mediaById={mediaById}
                   onSelect={stableOnSelect}
                   onPin={stableOnPin}
+                  onMakeGlobal={stableOnMakeGlobal}
                   pinPending={pinMutation.isPending}
+                  globalPending={makeGlobalMutation.isPending}
+                  isGlobal={globalIds.has(fragment.id) || !!fragment.meta?.global}
                   onDragStart={handleDragStart}
                   onDragEnter={handleDragEnter}
                   onDragEnd={handleDragEnd}

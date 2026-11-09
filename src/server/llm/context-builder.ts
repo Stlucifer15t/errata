@@ -1,4 +1,5 @@
 import { getStory, listFragments, getFragment, migrateStoryToSummaryFragments } from '../fragments/storage'
+import { listGlobalFragments } from '../fragments/global-fragments'
 import { registry } from '../fragments/registry'
 import { instructionRegistry } from '../instructions'
 import { createLogger } from '../logging'
@@ -223,9 +224,30 @@ export async function buildContextState(
 
   // Load all fragments by type
   requestLogger.debug('Loading fragments by type...')
-  const allGuidelines = await listFragments(dataDir, storyId, 'guideline')
-  const allKnowledge = await listFragments(dataDir, storyId, 'knowledge')
-  const allCharacters = await listFragments(dataDir, storyId, 'character')
+  const [allGuidelines, allKnowledge, allCharacters, globalFragments] = await Promise.all([
+    listFragments(dataDir, storyId, 'guideline'),
+    listFragments(dataDir, storyId, 'knowledge'),
+    listFragments(dataDir, storyId, 'character'),
+    listGlobalFragments(dataDir),
+  ])
+
+  // Global fragments apply across every story: merge them in by type so they
+  // flow through the same sticky/shortlist split as story-local fragments.
+  // Story-local fragments win on id collision (a fragment made global keeps
+  // its id; the local copy is the live one).
+  const globalByType = new Map<string, Fragment[]>()
+  for (const gf of globalFragments) {
+    const list = globalByType.get(gf.type) ?? []
+    list.push(gf)
+    globalByType.set(gf.type, list)
+  }
+  const mergeGlobal = (local: Fragment[], type: string) => {
+    const extra = (globalByType.get(type) ?? []).filter((gf) => !local.some((f) => f.id === gf.id))
+    return [...local, ...extra]
+  }
+  const allGuidelinesMerged = mergeGlobal(allGuidelines, 'guideline')
+  const allKnowledgeMerged = mergeGlobal(allKnowledge, 'knowledge')
+  const allCharactersMerged = mergeGlobal(allCharacters, 'character')
 
   // Load prose from chain - get active prose fragment IDs
   // If no chain exists (empty array), fall back to listing all prose fragments
@@ -362,12 +384,12 @@ export async function buildContextState(
 
   // Split guidelines, knowledge, and characters into sticky (full) vs shortlist
   const sortByOrder = (a: Fragment, b: Fragment) => a.order - b.order || a.createdAt.localeCompare(b.createdAt)
-  const stickyGuidelines = allGuidelines.filter((f) => f.sticky).sort(sortByOrder)
-  const nonStickyGuidelines = allGuidelines.filter((f) => !f.sticky)
-  const stickyKnowledge = allKnowledge.filter((f) => f.sticky).sort(sortByOrder)
-  const nonStickyKnowledge = allKnowledge.filter((f) => !f.sticky)
-  const stickyCharacters = allCharacters.filter((f) => f.sticky).sort(sortByOrder)
-  const nonStickyCharacters = allCharacters.filter((f) => !f.sticky)
+  const stickyGuidelines = allGuidelinesMerged.filter((f) => f.sticky).sort(sortByOrder)
+  const nonStickyGuidelines = allGuidelinesMerged.filter((f) => !f.sticky)
+  const stickyKnowledge = allKnowledgeMerged.filter((f) => f.sticky).sort(sortByOrder)
+  const nonStickyKnowledge = allKnowledgeMerged.filter((f) => !f.sticky)
+  const stickyCharacters = allCharactersMerged.filter((f) => f.sticky).sort(sortByOrder)
+  const nonStickyCharacters = allCharactersMerged.filter((f) => !f.sticky)
 
   const state = {
     story: { ...story, summary: effectiveSummary },

@@ -26,6 +26,7 @@ import { reanalyzeAfterProseChange } from '../librarian/reanalyze'
 import { createLogger } from '../logging'
 import { installFragmentBundle } from '../erratanet/pack-install'
 import type { Fragment } from '../fragments/schema'
+import { listGlobalFragments, makeFragmentGlobal, removeGlobalFragment } from '../fragments/global-fragments'
 import type { FragmentBundleData } from '@/lib/fragment-clipboard'
 
 function hasMaterialProseChange(before: Fragment, after: Fragment): boolean {
@@ -371,6 +372,40 @@ export function fragmentRoutes(dataDir: string) {
     }, {
       detail: { summary: 'Toggle the sticky flag' },
       body: t.Object({ sticky: t.Boolean() }),
+    })
+
+    // --- Global fragments (apply across every story) ---
+    .get('/global-fragments', async ({ query }) => {
+      const fragments = await listGlobalFragments(dataDir, query.type)
+      return { fragments }
+    }, {
+      detail: { summary: 'List global fragments (shared across stories)' },
+      query: t.Object({ type: t.Optional(t.String()) }),
+    })
+
+    .post('/stories/:storyId/fragments/:fragmentId/make-global', async ({ params, set }) => {
+      const fragment = await getFragment(dataDir, params.storyId, params.fragmentId)
+      if (!fragment) {
+        set.status = 404
+        return { error: 'Fragment not found' }
+      }
+      const globalCopy = await makeFragmentGlobal(dataDir, fragment)
+      logger.info('Fragment made global', { storyId: params.storyId, fragmentId: params.fragmentId })
+      return { ok: true, globalFragment: globalCopy }
+    }, {
+      detail: { summary: 'Copy a story fragment into the global pool' },
+    })
+
+    .delete('/global-fragments/:type/:fragmentId', async ({ params, set }) => {
+      const removed = await removeGlobalFragment(dataDir, params.type, params.fragmentId)
+      if (!removed) {
+        set.status = 404
+        return { error: 'Global fragment not found' }
+      }
+      logger.info('Global fragment removed', { type: params.type, fragmentId: params.fragmentId })
+      return { ok: true }
+    }, {
+      detail: { summary: 'Remove a fragment from the global pool' },
     })
 
     // --- Fragment reorder (bulk) ---
