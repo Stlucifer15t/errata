@@ -11,6 +11,7 @@ import {
 } from '../character-chat/storage'
 import { createLogger } from '../logging'
 import { encodeStream } from './encode-stream'
+import type { AgentStreamEvent } from '../agents/stream-types'
 import { chatMessageBodySchema } from './chat-schema'
 
 export function characterChatRoutes(dataDir: string) {
@@ -108,6 +109,34 @@ export function characterChatRoutes(dataDir: string) {
       }
 
       let agent: ReturnType<typeof createAgentInstance> | undefined
+      /** Text streamed so far, updated as deltas flow through; used to persist
+          a partial assistant reply when the stream fails or is aborted. */
+      let streamedPartial = ''
+
+      /** Save the sent messages plus the assistant reply (partial allowed). */
+      const persistMessages = async (assistantText: string, assistantReasoning?: string) => {
+        const now = new Date().toISOString()
+        const updatedConv: CharacterChatConversation = {
+          ...conv,
+          messages: [
+            ...body.messages.map((m) => ({
+              role: m.role as 'user' | 'assistant',
+              content: m.content,
+              ...(m.images?.length ? { images: m.images } : {}),
+              createdAt: now,
+            })),
+
+            {
+              role: 'assistant' as const,
+              content: assistantText,
+              ...(assistantReasoning ? { reasoning: assistantReasoning } : {}),
+              createdAt: now,
+            },
+          ],
+          updatedAt: now,
+        }
+        await saveCharacterConversation(dataDir, params.storyId, updatedConv)
+      }
       try {
         agent = createAgentInstance('character-chat.chat', { dataDir, storyId: params.storyId })
         const { eventStream, completion } = await agent.execute({
@@ -118,6 +147,28 @@ export function characterChatRoutes(dataDir: string) {
           maxSteps: story.settings.maxSteps ?? 10,
         })
 
+        // Mirror of the client-side accumulation: keep the last streamed text
+        // so a failed/aborted exchange still persists what was generated.
+        const trackedStream = new ReadableStream<AgentStreamEvent>({
+          async start(controller) {
+            const reader = eventStream.getReader()
+            try {
+              while (true) {
+                const { done, value } = await reader.read()
+                if (done) break
+                if (value.type === 'text') streamedPartial += (value.text ?? '')
+                controller.enqueue(value)
+              }
+              controller.close()
+            } catch (err) {
+              controller.error(err)
+            }
+          },
+          cancel() {
+            eventStream.cancel()
+          },
+        })
+
         // Persist conversation after completion (in background)
         completion.then(async (result) => {
           requestLogger.info('Character chat completed', {
@@ -125,32 +176,18 @@ export function characterChatRoutes(dataDir: string) {
             finishReason: result.finishReason,
             toolCallCount: result.toolCalls.length,
           })
-          const now = new Date().toISOString()
-          const updatedConv: CharacterChatConversation = {
-            ...conv,
-            messages: [
-              ...body.messages.map((m) => ({
-                role: m.role as 'user' | 'assistant',
-                content: m.content,
-                ...(m.images?.length ? { images: m.images } : {}),
-                createdAt: now,
-              })),
-
-              {
-                role: 'assistant' as const,
-                content: result.text,
-                ...(result.reasoning ? { reasoning: result.reasoning } : {}),
-                createdAt: now,
-              },
-            ],
-            updatedAt: now,
-          }
-          await saveCharacterConversation(dataDir, params.storyId, updatedConv)
-        }).catch((err) => {
+          await persistMessages(result.text, result.reasoning)
+        }).catch(async (err) => {
           requestLogger.error('Character chat completion error', { error: err instanceof Error ? err.message : String(err) })
+          // Keep whatever streamed before the failure instead of dropping the
+          // whole exchange.
+          const partial = streamedPartial.trim()
+          if (partial) {
+            await persistMessages(partial)
+          }
         })
 
-        return new Response(encodeStream(eventStream), {
+        return new Response(encodeStream(trackedStream), {
           headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8' },
         })
       } catch (err) {

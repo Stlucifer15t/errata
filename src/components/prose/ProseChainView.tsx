@@ -79,19 +79,29 @@ function StreamingSection({
   proseFragmentCount,
   lastFragmentContent,
   scrollAreaRef,
+  isGenerating,
+  streamedText,
+  thoughtSteps,
+  fragmentCountBeforeGeneration,
+  setStreamedText,
+  setThoughtSteps,
+  setFragmentCountBeforeGeneration,
 }: {
   storyId: string
   proseFragmentCount: number
   lastFragmentContent: string | undefined
   scrollAreaRef: React.RefObject<HTMLDivElement | null>
+  isGenerating: boolean
+  streamedText: string
+  thoughtSteps: ThoughtStep[]
+  fragmentCountBeforeGeneration: number | null
+  setStreamedText: (v: string) => void
+  setThoughtSteps: (v: ThoughtStep[]) => void
+  setFragmentCountBeforeGeneration: (v: number | null) => void
 }) {
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [streamedText, setStreamedText] = useState('')
-  const [thoughtSteps, setThoughtSteps] = useState<ThoughtStep[]>([])
-  const [fragmentCountBeforeGeneration, setFragmentCountBeforeGeneration] = useState<number | null>(null)
+  const queryClient = useQueryClient()
   const followRef = useRef(true)
   const lastTopRef = useRef(0)
-  const queryClient = useQueryClient()
   const { data: story } = useQuery({
     queryKey: ['story', storyId],
     queryFn: () => api.stories.get(storyId),
@@ -174,21 +184,6 @@ function StreamingSection({
           </div>
         </div>
       )}
-
-      <InlineGenerationInput
-        storyId={storyId}
-        isGenerating={isGenerating}
-        onGenerationStart={() => {
-          setIsGenerating(true)
-          setStreamedText('')
-          setThoughtSteps([])
-          setFragmentCountBeforeGeneration(proseFragmentCount)
-        }}
-        onGenerationStream={setStreamedText}
-        onGenerationThoughts={setThoughtSteps}
-        onGenerationComplete={() => setIsGenerating(false)}
-        onGenerationError={() => setIsGenerating(false)}
-      />
     </>
   )
 }
@@ -203,6 +198,13 @@ export function ProseChainView({
   onLaunchWizard,
   onAskLibrarian,
 }: ProseChainViewProps) {
+
+  // Generation state lives here (not in StreamingSection) so the docked input
+  // at the bottom and the streaming block inside the scroll area share it.
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [streamedText, setStreamedText] = useState('')
+  const [thoughtSteps, setThoughtSteps] = useState<ThoughtStep[]>([])
+  const [fragmentCountBeforeGeneration, setFragmentCountBeforeGeneration] = useState<number | null>(null)
 
   const [activeIndex, setActiveIndex] = useState(0)
   const [mobileTocOpen, setMobileTocOpen] = useState(false)
@@ -534,7 +536,7 @@ export function ProseChainView({
   }, [storyId, onSelectFragment])
 
   return (
-    <div className="flex flex-1 min-h-0 relative" data-component-id="prose-chain-root">
+    <div className="flex flex-col flex-1 min-h-0 relative" data-component-id="prose-chain-root">
       <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0 min-w-0" data-component-id="prose-chain-scroll">
         {/* Cover image banner */}
         {coverImage && (
@@ -691,10 +693,37 @@ export function ProseChainView({
             proseFragmentCount={orderedProseFragments.length}
             lastFragmentContent={orderedProseFragments[orderedProseFragments.length - 1]?.content}
             scrollAreaRef={scrollAreaRef}
+            isGenerating={isGenerating}
+            streamedText={streamedText}
+            thoughtSteps={thoughtSteps}
+            fragmentCountBeforeGeneration={fragmentCountBeforeGeneration}
+            setStreamedText={setStreamedText}
+            setThoughtSteps={setThoughtSteps}
+            setFragmentCountBeforeGeneration={setFragmentCountBeforeGeneration}
           />
         </div>
         </CharacterMentionProvider>
       </ScrollArea>
+
+      {/* Generation input — docked below the scroll area so it always sits at
+          the bottom of the screen instead of floating mid-page after the last
+          passage. The streaming block stays inside the scroll content. */}
+      <div className="shrink-0 border-t border-border/30 bg-background/80 backdrop-blur-sm px-4 pt-2" style={{ paddingBottom: 'calc(0.5rem + var(--tts-bar-height, 0px))' }}>
+        <InlineGenerationInput
+          storyId={storyId}
+          isGenerating={isGenerating}
+          onGenerationStart={() => {
+            setIsGenerating(true)
+            setStreamedText('')
+            setThoughtSteps([])
+            setFragmentCountBeforeGeneration(orderedProseFragments.length)
+          }}
+          onGenerationStream={setStreamedText}
+          onGenerationThoughts={setThoughtSteps}
+          onGenerationComplete={() => setIsGenerating(false)}
+          onGenerationError={() => setIsGenerating(false)}
+        />
+      </div>
 
       {/* Outline panel — side rail on desktop */}
       {orderedItems.length > 1 && (

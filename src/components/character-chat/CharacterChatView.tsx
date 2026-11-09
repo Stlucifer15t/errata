@@ -203,7 +203,8 @@ export function CharacterChatView({ storyId, initialCharacterId, onClose }: Char
       const stream = await api.characterChat.chat(storyId, activeConvId, apiMessages)
       const reader = stream.getReader()
 
-      let currentAssistant: AssistantMessage = { role: 'assistant', content: '' }
+      const currentAssistantRef: { current: AssistantMessage } = { current: { role: 'assistant', content: '' } }
+      const currentAssistant = currentAssistantRef.current
 
       while (true) {
         const { done, value } = await reader.read()
@@ -213,29 +214,29 @@ export function CharacterChatView({ storyId, initialCharacterId, onClose }: Char
 
         switch (event.type) {
           case 'text':
-            currentAssistant = {
-              ...currentAssistant,
-              content: currentAssistant.content + (event.text ?? ''),
+            currentAssistantRef.current = {
+              ...currentAssistantRef.current,
+              content: currentAssistantRef.current.content + (event.text ?? ''),
             }
             break
           case 'reasoning':
-            currentAssistant = {
-              ...currentAssistant,
-              reasoning: (currentAssistant.reasoning ?? '') + (event.text ?? ''),
+            currentAssistantRef.current = {
+              ...currentAssistantRef.current,
+              reasoning: (currentAssistantRef.current.reasoning ?? '') + (event.text ?? ''),
             }
             break
           case 'tool-call': {
-            const existing = currentAssistant.toolCalls ?? []
-            currentAssistant = {
-              ...currentAssistant,
+            const existing = currentAssistantRef.current.toolCalls ?? []
+            currentAssistantRef.current = {
+              ...currentAssistantRef.current,
               toolCalls: [...existing, { id: event.id, toolName: event.toolName, args: event.args ?? {} }],
             }
             break
           }
           case 'tool-result': {
-            const calls = currentAssistant.toolCalls ?? []
-            currentAssistant = {
-              ...currentAssistant,
+            const calls = currentAssistantRef.current.toolCalls ?? []
+            currentAssistantRef.current = {
+              ...currentAssistantRef.current,
               toolCalls: calls.map((tc) =>
                 tc.id === event.id ? { ...tc, result: event.result } : tc,
               ),
@@ -246,16 +247,23 @@ export function CharacterChatView({ storyId, initialCharacterId, onClose }: Char
             break
         }
 
-        setMessages([...updatedMessages, currentAssistant])
+        setMessages([...updatedMessages, currentAssistantRef.current])
       }
 
-      setMessages([...updatedMessages, currentAssistant])
+      setMessages([...updatedMessages, currentAssistantRef.current])
 
       // Invalidate conversation list
       await queryClient.invalidateQueries({ queryKey: ['character-chat-conversations', storyId] })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Chat failed')
-      setMessages(updatedMessages)
+      // Keep any partial assistant content that streamed before the failure
+      // (or user abort) instead of silently dropping the message.
+      if (currentAssistantRef.current.content.trim() || currentAssistantRef.current.toolCalls?.length) {
+        setMessages([...updatedMessages, currentAssistantRef.current])
+        await queryClient.invalidateQueries({ queryKey: ['character-chat-conversations', storyId] })
+      } else {
+        setMessages(updatedMessages)
+      }
     } finally {
       setIsStreaming(false)
       textareaRef.current?.focus()
